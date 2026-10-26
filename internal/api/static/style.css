@@ -81,7 +81,11 @@ nav.top, footer.top {
   margin-bottom: 1.5rem;
 }
 footer.top { border-bottom: 0; border-top: 1px solid var(--line); margin: 2.5rem 0 0; color: var(--muted); }
-nav.top a { color: var(--fg); text-decoration: none; }
+nav.top a { text-decoration: none; }
+/* 导航栏的名字默认是前景色，除非它自己带了活跃度档位：`nav.top a` 的权重比 `.pt-*` 高，
+   不这么收窄的话右上角那个名字永远是黑的，档位只在别的页面上生效——同一个人两种样子，
+   比全都灰着更难解释。 */
+nav.top a:not([class*="pt-"]) { color: var(--fg); }
 nav.top a:hover { color: var(--accent); }
 nav.top .brand { font-weight: 700; letter-spacing: .02em; }
 nav.top .acct { color: var(--accent); }
@@ -215,7 +219,9 @@ table .when { color: var(--muted); font-size: .8rem; }
 /* 帖子评论：一条回复是带左线的方块，作者与时间在上，操作靠右 */
 article.reply { border-left: 3px solid var(--line); padding: .35rem .8rem; margin: .5rem 0; }
 article.reply header { display: flex; gap: .6rem; align-items: baseline; font-size: .85rem; color: var(--muted); }
-article.reply .who { font-weight: 600; color: var(--fg); }
+article.reply .who { font-weight: 600; }
+/* 评论的抬头整片是灰的，作者名要跳出来；但带档位颜色的名字不在这里——理由同导航栏那条。 */
+article.reply .who:not([class*="pt-"]) { color: var(--fg); }
 article.reply .ops { margin-left: auto; }
 article.reply .body p { margin: .3rem 0; }
 
