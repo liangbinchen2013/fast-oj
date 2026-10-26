@@ -5,15 +5,16 @@
   新班级开学建号：<a href="/admin/accounts/new">批量建号</a>。</p>
 
 <table>
-  <tr><th class="num">ID</th><th>用户名</th><th>邮箱</th><th>角色</th><th>状态</th><th></th></tr>
+  <tr><th class="num">ID</th><th>用户名</th><th class="num">积分</th><th>邮箱</th><th>角色</th><th>状态</th><th></th></tr>
   {{range .Data.Users}}
   <tr>
     <td class="num">{{.ID}}</td>
     <td>
-      <a href="/u/{{.Handle}}">{{.Handle}}</a>
+      <a class="pt-{{.ColorClass}}" href="/u/{{.Handle}}">{{.Handle}}</a>
       {{if eq .ID $.Data.Self}}<span class="hidden">本人</span>{{end}}
       {{if .Owner}}<b>超级管理员</b>{{end}}
     </td>
+    <td class="num">{{.Points}}</td>
     <td>{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
     <td>{{.Role}}</td>
     <td>{{.Status}}</td>

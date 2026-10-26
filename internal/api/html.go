@@ -58,7 +58,10 @@ var views = mustLoadViews()
 type viewer struct {
 	Handle string
 	Name   string
-	Admin  bool
+	// Color 是这个人自己的活跃度档位类名：导航栏上的名字也该是那个颜色，
+	// 一个人不该在每一页看到自己变成别的档位。
+	Color string
+	Admin bool
 	// Manage and Site are the two capabilities the nav bar renders links for, so
 	// a delegate with only one of the consoles sees only that one.
 	Manage bool

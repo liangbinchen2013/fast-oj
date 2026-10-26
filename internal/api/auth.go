@@ -268,7 +268,7 @@ func (a actor) viewer() *viewer {
 	}
 	theme := store.ParseTheme(a.User.Theme)
 	return &viewer{
-		Handle: a.User.Handle, Name: name, Admin: a.Admin,
+		Handle: a.User.Handle, Name: name, Color: a.User.ColorClass(), Admin: a.Admin,
 		Manage: a.can(permPermissionManage), Site: a.can(permSiteSettings),
 		Author:   a.can(permProblemCreate) || a.can(permProblemEditAny),
 		Contests: a.canHostContests(),

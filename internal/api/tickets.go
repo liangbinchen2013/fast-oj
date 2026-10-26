@@ -35,6 +35,8 @@ type ticketRow struct {
 	Title       string
 	Author      string
 	DisplayName string
+	// Color 是这个名字的活跃度档位类名（见 feed.go 里同名的理由）。
+	Color       string
 	When        string
 	Updated     string
 	Status      string
@@ -54,7 +56,7 @@ func ticketRows(items []store.Ticket) []ticketRow {
 		rows = append(rows, ticketRow{
 			ID: t.ID, Kind: t.Kind, KindLabel: store.TicketKindLabel(t.Kind),
 			Title: t.Title, Author: t.Author, DisplayName: ticketName(t.DisplayName, t.Author),
-			When: agoMS(t.CreatedAt), Updated: agoMS(t.UpdatedAt),
+			Color: t.Color, When: agoMS(t.CreatedAt), Updated: agoMS(t.UpdatedAt),
 			Status: t.Status, StatusLabel: store.TicketStatusLabel(t.Status),
 			StatusClass: store.TicketStatusClass(t.Status),
 			Handler:     t.Handler, Replies: t.Replies,
@@ -292,6 +294,7 @@ type ticketReplyRow struct {
 	ID          int64
 	Author      string
 	DisplayName string
+	Color       string
 	When        string
 	Body        template.HTML
 	// Event 非空时这一行是系统流水，排版上不该长得像谁说的话。
@@ -307,6 +310,7 @@ type ticketData struct {
 	Title       string
 	Author      string
 	DisplayName string
+	Color       string
 	When        string
 	Updated     string
 	Body        template.HTML
@@ -376,7 +380,7 @@ func (s *Server) handleTicketGet(w http.ResponseWriter, r *http.Request) {
 	d := ticketData{
 		ID: tk.ID, Kind: tk.Kind, KindLabel: store.TicketKindLabel(tk.Kind),
 		Title: tk.Title, Author: tk.Author, DisplayName: ticketName(tk.DisplayName, tk.Author),
-		When: agoMS(tk.CreatedAt), Updated: agoMS(tk.UpdatedAt),
+		Color: tk.Color, When: agoMS(tk.CreatedAt), Updated: agoMS(tk.UpdatedAt),
 		Body:   renderMarkdownHTML(tk.Body),
 		Status: tk.Status, StatusLabel: store.TicketStatusLabel(tk.Status),
 		StatusClass: store.TicketStatusClass(tk.Status), Handler: tk.Handler,
@@ -400,7 +404,7 @@ func (s *Server) handleTicketGet(w http.ResponseWriter, r *http.Request) {
 	for _, rep := range replies {
 		d.Replies = append(d.Replies, ticketReplyRow{
 			ID: rep.ID, Author: rep.Author, DisplayName: ticketName(rep.DisplayName, rep.Author),
-			When: agoMS(rep.CreatedAt), Body: renderMarkdownHTML(rep.Body),
+			Color: rep.Color, When: agoMS(rep.CreatedAt), Body: renderMarkdownHTML(rep.Body),
 			Event: rep.Event != "",
 			IsYou: rep.AuthorID == a.User.ID,
 			// 「处理人」只给真正接手这单的人：有权限不等于在办。

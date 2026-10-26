@@ -102,6 +102,8 @@ type Ticket struct {
 	AuthorID    int64
 	Author      string
 	DisplayName string
+	// Color 是这个名字的活跃度档位（见 feed.go 里同名的理由）。
+	Color string
 	// 挂着的题目与提交，0 表示没挂。题目/提交被删时外键置空，工单本身留着。
 	ProblemID    int64
 	ProblemPID   string
@@ -121,6 +123,7 @@ type TicketReply struct {
 	AuthorID    int64
 	Author      string
 	DisplayName string
+	Color       string
 	Body        string
 	// Event 非空时这是一条系统流水（status/assign），不是谁写的话。
 	Event     string
@@ -139,7 +142,7 @@ type TicketFilter struct {
 	WithCount bool
 }
 
-var ticketColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, ` + personSQL(`u`) + `,
+var ticketColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, ` + personSQL(`u`) + `, ` + colorSQL(`u`) + `,
 		IFNULL(t.problem_id, 0), IFNULL(p.pid, ''), IFNULL(p.title, ''),
 		IFNULL(t.submission_id, 0), t.status, IFNULL(t.handler_id, 0), IFNULL(h.handle, ''),
 		t.created_at, t.updated_at`
@@ -151,7 +154,7 @@ const ticketFrom = ` FROM tickets t
 
 func scanTicket(row scanner) (Ticket, error) {
 	var t Ticket
-	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName,
+	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName, &t.Color,
 		&t.ProblemID, &t.ProblemPID, &t.ProblemTitle, &t.SubmissionID, &t.Status,
 		&t.HandlerID, &t.Handler, &t.CreatedAt, &t.UpdatedAt)
 	return t, notFound(err)
@@ -205,7 +208,7 @@ func (db *DB) FindTicket(ctx context.Context, id int64) (Ticket, error) {
 	var t Ticket
 	err := db.SQL.QueryRowContext(ctx,
 		`SELECT `+ticketColumns+ticketFrom+` WHERE t.id = ?`, id).Scan(
-		&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName,
+		&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName, &t.Color,
 		&t.ProblemID, &t.ProblemPID, &t.ProblemTitle, &t.SubmissionID, &t.Status,
 		&t.HandlerID, &t.Handler, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
@@ -262,7 +265,7 @@ func (db *DB) ListTickets(ctx context.Context, f TicketFilter) ([]Ticket, error)
 	var out []Ticket
 	for rows.Next() {
 		var t Ticket
-		if err := rows.Scan(&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName,
+		if err := rows.Scan(&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName, &t.Color,
 			&t.ProblemID, &t.ProblemPID, &t.ProblemTitle, &t.SubmissionID, &t.Status,
 			&t.HandlerID, &t.Handler, &t.CreatedAt, &t.UpdatedAt, &t.Replies); err != nil {
 			return nil, err
@@ -377,7 +380,7 @@ func (db *DB) DeleteTicket(ctx context.Context, id int64) (bool, error) {
 // down like everything else a human wrote.
 func (db *DB) ListTicketReplies(ctx context.Context, ticketID int64) ([]TicketReply, error) {
 	rows, err := db.SQL.QueryContext(ctx,
-		`SELECT r.id, r.ticket_id, r.author_id, u.handle, `+personSQL(`u`)+`, r.body, r.event, r.created_at
+		`SELECT r.id, r.ticket_id, r.author_id, u.handle, `+personSQL(`u`)+`, `+colorSQL(`u`)+`, r.body, r.event, r.created_at
 		 FROM ticket_replies r JOIN users u ON u.id = r.author_id
 		 WHERE r.ticket_id = ? ORDER BY r.id`, ticketID)
 	if err != nil {
@@ -387,7 +390,7 @@ func (db *DB) ListTicketReplies(ctx context.Context, ticketID int64) ([]TicketRe
 	var out []TicketReply
 	for rows.Next() {
 		var r TicketReply
-		if err := rows.Scan(&r.ID, &r.TicketID, &r.AuthorID, &r.Author, &r.DisplayName,
+		if err := rows.Scan(&r.ID, &r.TicketID, &r.AuthorID, &r.Author, &r.DisplayName, &r.Color,
 			&r.Body, &r.Event, &r.CreatedAt); err != nil {
 			return nil, err
 		}

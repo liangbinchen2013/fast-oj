@@ -24,16 +24,20 @@ type Post struct {
 	AuthorID    int64  `json:"author_id"`
 	Author      string `json:"author"`
 	DisplayName string `json:"display_name,omitempty"`
-	Body        string `json:"body"`
-	CreatedAt   int64  `json:"created_at"`
-	Visible     bool   `json:"visible"`
-	HiddenBy    int64  `json:"hidden_by,omitempty"`
-	HiddenAt    int64  `json:"hidden_at,omitempty"`
+	// Color 是这个名字的活跃度档位（blue/green/orange/red/purple/brown 之一，由 SQL 侧的
+	// colorSQL 收口成这六个词），直接当 class 用。它跟着名字一起读出来，不多一次查询。
+	Color     string `json:"color,omitempty"`
+	Body      string `json:"body"`
+	CreatedAt int64  `json:"created_at"`
+	Visible   bool   `json:"visible"`
+	HiddenBy  int64  `json:"hidden_by,omitempty"`
+	HiddenAt  int64  `json:"hidden_at,omitempty"`
 }
 
 // postColumns 里的名字走 personSQL：那一个人"该被叫作什么"的唯一出口（注销后的墓碑署名、
-// 管理员贴的标签都在这里接上），动态流不该自己复制一套规则。
-var postColumns = `p.id, p.author_id, u.handle, ` + personSQL(`u`) + `, p.body, p.created_at,
+// 管理员贴的标签都在这里接上），动态流不该自己复制一套规则。颜色的类名走 colorSQL：同一条
+// 唯一出口的道理——名字出现在哪，档位就得跟到哪。
+var postColumns = `p.id, p.author_id, u.handle, ` + personSQL(`u`) + `, ` + colorSQL(`u`) + `, p.body, p.created_at,
 		p.visible, IFNULL(p.hidden_by, 0), IFNULL(p.hidden_at, 0)`
 
 func scanPost(row scanner) (Post, error) {
@@ -41,7 +45,7 @@ func scanPost(row scanner) (Post, error) {
 		p       Post
 		visible int
 	)
-	err := row.Scan(&p.ID, &p.AuthorID, &p.Author, &p.DisplayName, &p.Body,
+	err := row.Scan(&p.ID, &p.AuthorID, &p.Author, &p.DisplayName, &p.Color, &p.Body,
 		&p.CreatedAt, &visible, &p.HiddenBy, &p.HiddenAt)
 	p.Visible = visible != 0
 	return p, notFound(err)

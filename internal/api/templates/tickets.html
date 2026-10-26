@@ -41,7 +41,7 @@
       {{if .HasSubmit}}<span class="meta">· 提交 <a href="/submissions/{{.Submission}}">#{{.Submission}}</a></span>{{end}}
     </td>
     <td><span class="badge {{.StatusClass}}">{{.StatusLabel}}</span></td>
-    <td><a href="/u/{{.Author}}">{{.DisplayName}}</a></td>
+    <td><a class="pt-{{.Color}}" href="/u/{{.Author}}">{{.DisplayName}}</a></td>
     <td>{{if .Handler}}{{.Handler}}{{else}}<span class="meta">—</span>{{end}}</td>
     <td class="num">{{.Replies}}</td>
     <td>{{.Updated}}</td>

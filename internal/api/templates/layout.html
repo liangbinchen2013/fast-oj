@@ -22,6 +22,7 @@
   {{if .Me.Contests}}<a href="/contests/new">办赛</a>{{end}}
   {{if .Me.Manage}}<a href="/admin/perms">权限</a>{{end}}
   {{if .Me.Site}}<a href="/admin/site">站点</a>{{end}}
+  {{if .Me.Site}}<a href="/admin/points">积分</a>{{end}}
   {{if .Me.Stats}}<a href="/admin/stats">统计</a>{{end}}
   {{if .Me.IPs}}<a href="/admin/ips">封禁</a>{{end}}
   {{if .Me.Audit}}<a href="/admin/audit">审计</a>{{end}}
@@ -30,7 +31,7 @@
     <button type="submit">退出</button>
   </form>
   <span class="me">
-    <a href="/u/{{.Me.Handle}}">{{.Me.Name}}</a>
+    <a class="pt-{{.Me.Color}}" href="/u/{{.Me.Handle}}">{{.Me.Name}}</a>
     <a href="/settings">设置</a>
     <a href="/messages">私信{{if .Me.Unread}} <b class="badge bad">{{.Me.Unread}}</b>{{end}}</a>
   </span>

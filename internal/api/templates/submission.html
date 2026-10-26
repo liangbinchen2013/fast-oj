@@ -2,7 +2,7 @@
 <h1>提交 #{{.Data.ID}}</h1>
 
 <p class="meta">
-  <a href="/u/{{.Data.Handle}}">{{.Data.Name}}</a> →
+  <a class="pt-{{.Data.NameColor}}" href="/u/{{.Data.Handle}}">{{.Data.Name}}</a> →
   <a href="/problems/{{.Data.PID}}">{{.Data.PID}}　{{.Data.Title}}</a>
   · {{.Data.Language}}{{if .Data.Version}}（{{.Data.Version}}）{{end}} · <span class="badge {{.Data.Class}}">{{.Data.Outcome}}</span>
   {{if .Data.Contest}}· 比赛 <a href="{{.Data.ContestLink}}">{{.Data.Contest}}</a>{{end}}

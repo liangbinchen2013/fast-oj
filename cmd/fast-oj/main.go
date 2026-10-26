@@ -48,9 +48,10 @@ func run() error {
 	}
 	defer db.Close()
 
+	app := api.New(cfg, log, db)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           api.New(cfg, log, db).Handler(),
+		Handler:           app.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -59,6 +60,10 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	// 积分那一套自己走：按管理员在 /admin/points 设的间隔重算所有人的分值与颜色。
+	// 挂在同一个 ctx 上，收到信号就和 HTTP 一起停。
+	go app.RunPoints(ctx)
 
 	ln, err := net.Listen("tcp", cfg.Addr)
 	if err != nil {

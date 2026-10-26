@@ -4,7 +4,7 @@
   <tr><th>对方</th><th>最后一条</th><th class="num">未读</th><th>时间</th></tr>
   {{range .Data.Threads}}
   <tr>
-    <td><a href="/messages/{{.Peer}}">{{.PeerName}}</a></td>
+    <td><a class="pt-{{.PeerColor}}" href="/messages/{{.Peer}}">{{.PeerName}}</a></td>
     <td>{{if .FromMe}}我：{{end}}{{.Last}}</td>
     <td class="num">{{if .Unread}}<b class="badge bad">{{.Unread}}</b>{{else}}—{{end}}</td>
     <td class="meta">{{.When}}</td>

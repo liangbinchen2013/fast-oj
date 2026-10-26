@@ -1,0 +1,120 @@
+{{define "content"}}
+<h1>积分与颜色</h1>
+<p class="meta">积分是<b>活跃度</b>的读数，四个维度各自算分再相加：做题、提交、比赛、社区发言。
+  名字的颜色就是它的显示：蓝 → 绿 → 橙 → 红。<b>紫=管理员、棕=处罚，只有管理员能设，自动那一路不会改它们</b>；
+  其余四档由下面这套参数按间隔自动更新。</p>
+
+<h2>档位</h2>
+<table class="tiers">
+  <tr><th>颜色</th><th>从多少分起</th><th>怎么来</th></tr>
+  {{range .Data.Tiers}}
+  <tr>
+    <td><span class="pt-{{.Class}}">示例名字</span></td>
+    <td class="num">{{if or (eq .Class "purple") (eq .Class "brown")}}—{{else}}{{.From}}{{end}}</td>
+    <td class="meta">{{.Note}}</td>
+  </tr>
+  {{end}}
+</table>
+
+<form method="post" action="/admin/points">
+  <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
+
+  <h2>每个维度值多少分</h2>
+  <p class="meta">「单位分」是每发生一次值多少，「上限」是这一维度最多堆到几分——上限是这套东西不被刷爆的关键：
+    一个人提交一万次，那一档也最多只值 cap。填 0 是<b>用回默认值</b>（想让某个维度不计分请把它设成很小的数，
+    或者干脆关掉总开关）。</p>
+  <div class="row">
+    <div>
+      <label>做对一道题（去重）</label>
+      <input type="number" name="problem_unit" value="{{.Data.Cfg.ProblemUnit}}" min="0" max="1000"> 分
+      <label>上限</label>
+      <input type="number" name="problem_cap" value="{{.Data.Cfg.ProblemCap}}" min="0" max="100000">
+    </div>
+    <div>
+      <label>每次提交</label>
+      <input type="number" name="submit_unit" value="{{.Data.Cfg.SubmitUnit}}" min="0" max="1000"> 分
+      <label>上限</label>
+      <input type="number" name="submit_cap" value="{{.Data.Cfg.SubmitCap}}" min="0" max="100000">
+    </div>
+    <div>
+      <label>参加一场比赛</label>
+      <input type="number" name="contest_unit" value="{{.Data.Cfg.ContestUnit}}" min="0" max="1000"> 分
+      <label>上限</label>
+      <input type="number" name="contest_cap" value="{{.Data.Cfg.ContestCap}}" min="0" max="100000">
+    </div>
+    <div>
+      <label>发一条动态 / 帖子 / 评论</label>
+      <input type="number" name="community_unit" value="{{.Data.Cfg.CommunityUnit}}" min="0" max="1000"> 分
+      <label>上限</label>
+      <input type="number" name="community_cap" value="{{.Data.Cfg.CommunityCap}}" min="0" max="100000">
+    </div>
+  </div>
+
+  <h2>三档门槛</h2>
+  <p class="meta">低于绿的门槛是蓝。三格必须一路往上走，填反了会自动抬平（橙不会低于绿，红不会低于橙）。</p>
+  <div class="row">
+    <div>
+      <label>绿 从</label>
+      <input type="number" name="color_green" value="{{.Data.Cfg.Green}}" min="0" max="100000"> 分
+    </div>
+    <div>
+      <label>橙 从</label>
+      <input type="number" name="color_orange" value="{{.Data.Cfg.Orange}}" min="0" max="100000"> 分
+    </div>
+    <div>
+      <label>红 从</label>
+      <input type="number" name="color_red" value="{{.Data.Cfg.Red}}" min="0" max="100000"> 分
+    </div>
+  </div>
+
+  <h2>更新与衰减</h2>
+  <p class="meta">重算间隔是「积分最多滞后多久」的口径：一次重算要从提交、帖子、评论那几张表里聚合一遍，
+    所以它是后台自己跑的，不挂在任何人的请求上。间隔改完下一轮就生效，不用重启。</p>
+  <div class="row">
+    <div>
+      <label>每隔几分钟重算（1..1440）</label>
+      <input type="number" name="refresh_minutes" value="{{.Data.Cfg.RefreshMinutes}}" min="1" max="1440"> 分钟
+    </div>
+    <div>
+      <label>每闲一天扣掉（0..90，0 就是不衰减）</label>
+      <input type="number" name="decay_per_day" value="{{.Data.Cfg.DecayPerDay}}" min="0" max="90"> %
+    </div>
+  </div>
+  <label class="check">
+    <input type="checkbox" name="enabled" value="1" {{if .Data.Cfg.Enabled}}checked{{end}}>
+    启用积分与自动颜色
+  </label>
+  <p class="meta">关掉之后：分值停在最后一次算出的样子，自动那一档的颜色收回去（紫和棕照旧留着）。
+    已经存在的历史不受影响。</p>
+
+  <p>
+    <button type="submit" name="do" value="save">保存</button>
+    <button type="submit" name="do" value="save_run">保存并立即重算</button>
+    <button type="submit" name="do" value="run">只按已存的参数重算一次</button>
+  </p>
+</form>
+
+<h2>现在谁多少分</h2>
+<p class="meta">上一次重算：{{.Data.LastAt}}。这张表按分值从高到低排，最多 50 行；
+  改完数字点「保存并立即重算」就能立刻看见谁因此变绿、谁掉回蓝。</p>
+<table>
+  <tr><th>名字</th><th class="num">总分</th><th>明细（未衰减）</th><th>颜色来路</th></tr>
+  {{range .Data.Rows}}
+  <tr>
+    <td><a class="pt-{{.ColorClass}}" href="/u/{{.Handle}}">{{.Name}}</a></td>
+    <td class="num">{{.Points}}</td>
+    <td class="meta">
+      {{range $i, $d := .Dims}}{{if $i}} · {{end}}{{$d.Label}} {{$d.Score}}{{end}}
+    </td>
+    <td class="meta">
+      {{if .Locked}}管理员指定（{{.Color}}）{{else}}跟着积分{{end}}
+      · <a href="/admin/perms/u/{{.Handle}}">去改</a>
+    </td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4" class="meta">还没有人。</td></tr>
+  {{end}}
+</table>
+<p class="meta">默认口径是：题 10/道 上限 300，提交 1/次 上限 60，比赛 20/场 上限 200，发言 2/条 上限 120，
+  每闲一天扣 5%，档位 30 / 80 / 160，每 10 分钟重算。</p>
+{{end}}

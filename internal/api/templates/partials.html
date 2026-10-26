@@ -2,7 +2,7 @@
 {{range .Data.Posts}}
 <article class="post{{if .Hidden}} muted{{end}}">
   <header>
-    <a class="who" href="/u/{{.Author}}">{{.DisplayName}}</a>
+    <a class="who pt-{{.Color}}" href="/u/{{.Author}}">{{.DisplayName}}</a>
     <span class="when">{{.When}}</span>
     {{if .Hidden}}<span class="hidden">已隐藏</span>{{end}}
     <span class="ops">

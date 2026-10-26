@@ -27,7 +27,7 @@
       <span class="when">{{.When}}</span>
     </header>
     <b class="card-title">{{.Title}}</b>
-    <p class="when">{{.DisplayName}}{{if .HasProblem}} · {{.ProblemPID}}{{end}} · 评论 {{.Comments}}</p>
+    <p class="when"><span class="pt-{{.Color}}">{{.DisplayName}}</span>{{if .HasProblem}} · {{.ProblemPID}}{{end}} · 评论 {{.Comments}}</p>
   </a>
   {{else}}
   <p class="meta">还没有帖子。<a href="/topics/new">来发第一帖</a>。</p>

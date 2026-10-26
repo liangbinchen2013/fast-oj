@@ -3,7 +3,7 @@
 
 <p class="meta">
   <span class="badge {{if eq .Data.Kind "help"}}warn{{end}}">{{.Data.KindLabel}}</span>
-  <a href="/u/{{.Data.Author}}">{{.Data.DisplayName}}</a> · {{.Data.When}}
+  <a class="pt-{{.Data.Color}}" href="/u/{{.Data.Author}}">{{.Data.DisplayName}}</a> · {{.Data.When}}
   {{if .Data.HasProblem}} · 题目 <a href="/problems/{{.Data.ProblemPID}}">{{.Data.ProblemPID}}</a> {{.Data.ProblemName}}{{end}}
 </p>
 
@@ -24,7 +24,7 @@
 {{range .Data.Comments}}
 <article class="reply">
   <header>
-    <a class="who" href="/u/{{.Author}}">{{.DisplayName}}</a>
+    <a class="who pt-{{.Color}}" href="/u/{{.Author}}">{{.DisplayName}}</a>
     <span class="when">{{.When}}</span>
     {{if .CanDelete}}
     <form class="inline ops" method="post" action="/topics/comments/{{.ID}}/delete">

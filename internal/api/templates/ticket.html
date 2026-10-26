@@ -4,7 +4,7 @@
 <p class="meta">
   <span class="badge {{if eq .Data.Kind "report"}}warn{{end}}">{{.Data.KindLabel}}</span>
   <span class="badge {{.Data.StatusClass}}">{{.Data.StatusLabel}}</span>
-  <a href="/u/{{.Data.Author}}">{{.Data.DisplayName}}</a> · {{.Data.When}}
+  <a class="pt-{{.Data.Color}}" href="/u/{{.Data.Author}}">{{.Data.DisplayName}}</a> · {{.Data.When}}
   {{if .Data.HasProblem}} · 题目 <a href="/problems/{{.Data.ProblemPID}}">{{.Data.ProblemPID}}</a> {{.Data.ProblemName}}{{end}}
   {{if .Data.HasSubmit}} · 提交 <a href="/submissions/{{.Data.Submission}}">#{{.Data.Submission}}</a>{{end}}
   {{if .Data.Handler}} · 处理人 {{.Data.Handler}}{{end}}
@@ -20,7 +20,7 @@
   {{else}}
   <article class="reply">
     <p class="meta">
-      <a href="/u/{{.Author}}">{{.DisplayName}}</a>
+      <a class="pt-{{.Color}}" href="/u/{{.Author}}">{{.DisplayName}}</a>
       {{if .IsStaff}}<span class="badge ok">处理人</span>{{end}}
       {{if .IsYou}}<span class="meta">（你）</span>{{end}}
       · {{.When}}

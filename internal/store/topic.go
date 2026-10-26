@@ -43,6 +43,8 @@ type Topic struct {
 	AuthorID    int64
 	Author      string
 	DisplayName string
+	// Color 是这个名字的活跃度档位，读名字的时候一起带出来（见 feed.go 里同名的理由）。
+	Color string
 	// ProblemID is 0 for a 社区贴. The two text fields come along in the same join,
 	// so a list page never needs a second query per row.
 	ProblemID    int64
@@ -58,6 +60,7 @@ type TopicComment struct {
 	AuthorID    int64
 	Author      string
 	DisplayName string
+	Color       string
 	Body        string
 	CreatedAt   int64
 }
@@ -73,7 +76,7 @@ type TopicFilter struct {
 	Limit     int
 }
 
-var topicColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, ` + personSQL(`u`) + `,
+var topicColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, ` + personSQL(`u`) + `, ` + colorSQL(`u`) + `,
 		IFNULL(t.problem_id, 0), IFNULL(p.pid, ''), IFNULL(p.title, ''), t.created_at`
 
 const topicFrom = ` FROM topics t
@@ -82,7 +85,7 @@ const topicFrom = ` FROM topics t
 
 func scanTopic(row scanner) (Topic, error) {
 	var t Topic
-	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName,
+	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName, &t.Color,
 		&t.ProblemID, &t.ProblemPID, &t.ProblemTitle, &t.CreatedAt)
 	return t, notFound(err)
 }
@@ -266,11 +269,11 @@ func (db *DB) DeleteTopicAny(ctx context.Context, id int64) (bool, error) {
 
 // --- comments ---
 
-var topicCommentColumns = `c.id, c.topic_id, c.author_id, u.handle, ` + personSQL(`u`) + `, c.body, c.created_at`
+var topicCommentColumns = `c.id, c.topic_id, c.author_id, u.handle, ` + personSQL(`u`) + `, ` + colorSQL(`u`) + `, c.body, c.created_at`
 
 func scanTopicComment(row scanner) (TopicComment, error) {
 	var c TopicComment
-	err := row.Scan(&c.ID, &c.TopicID, &c.AuthorID, &c.Author, &c.DisplayName, &c.Body, &c.CreatedAt)
+	err := row.Scan(&c.ID, &c.TopicID, &c.AuthorID, &c.Author, &c.DisplayName, &c.Color, &c.Body, &c.CreatedAt)
 	return c, notFound(err)
 }
 

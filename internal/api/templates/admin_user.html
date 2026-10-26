@@ -1,8 +1,9 @@
 {{define "content"}}
-<h1>{{.Data.Target.Handle}} 的权限</h1>
+<h1 class="pt-{{.Data.ColorClass}}">{{.Data.Target.Handle}} 的权限</h1>
 <p class="meta">
   邮箱 {{if .Data.Target.Email}}{{.Data.Target.Email}}{{else}}未填{{end}} ·
   角色 <b>{{.Data.Target.Role}}</b> · 状态 <b>{{.Data.Target.Status}}</b> ·
+  积分 <b>{{.Data.Target.Points}}</b> ·
   <a href="/u/{{.Data.Target.Handle}}">看主页</a>
 </p>
 
@@ -71,6 +72,22 @@
 </form>
 <p class="meta">标签不是权限：贴上"管理员"不会让这个账号多出任何能力，去掉也不会。全站凡是出现名字的地方
   都跟着显示，形如 <b>{{.Data.Target.Handle}} [作弊者]</b>；注销账号时和身份一起抹掉。</p>
+
+<h2>名字颜色</h2>
+<form class="row" method="post" action="/admin/users/{{.Data.Target.Handle}}/color">
+  <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
+  <div style="flex: 1 1 18rem"><label>这一列现在是 <span class="pt-{{.Data.ColorClass}}">{{.Data.Target.Handle}}</span></label>
+    <select name="color">
+      {{range .Data.ColorOptions}}
+      <option value="{{.Value}}" {{if eq .Value $.Data.Color}}selected{{end}}>{{.Label}}</option>
+      {{end}}
+    </select>
+  </div>
+  <input type="submit" value="保存颜色">
+</form>
+<p class="meta">蓝、绿、橙、红是<b>积分的读数</b>，不能手选——不然一个人就能让自己看起来很像活跃用户。
+  紫（管理员）和棕（被处罚）是<b>状态</b>，只有管理员能设，设上之后自动重算不会再改它；
+  想让他重新跟着积分走，选回"跟着积分自动"。参数的口径在 <a href="/admin/points">积分与颜色</a> 那一页。</p>
 {{end}}
 
 {{if and (not .Data.Self) (not .Data.Owner) (not .Data.NeedStepUp) .Data.CanUser}}

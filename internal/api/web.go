@@ -89,16 +89,19 @@ type subRow struct {
 	Handle string
 	// Name is who the row prints as. For a cancelled account that is not Handle:
 	// the login name has been freed and may already belong to the next registrant.
-	Name     string
-	PID      string
-	Title    string
-	Language string
-	Class    string
-	Outcome  string
-	Time     string
-	Mem      string
-	Score    string
-	Ago      string
+	Name string
+	// NameColor 是这个名字的活跃度档位类名（blue/green/orange/red/purple/brown 之一，
+	// store.colorSQL 已经把空值收成 blue，所以这里可以直接拼进 class）。
+	NameColor string
+	PID       string
+	Title     string
+	Language  string
+	Class     string
+	Outcome   string
+	Time      string
+	Mem       string
+	Score     string
+	Ago       string
 }
 
 func rowOf(d store.SubmissionDetail) subRow {
@@ -108,7 +111,8 @@ func rowOf(d store.SubmissionDetail) subRow {
 		score = fmt.Sprintf("%d/%d", d.Score, d.TotalScore)
 	}
 	return subRow{
-		ID: d.ID, Handle: d.Handle, Name: personName(d.Name, d.Handle), PID: d.PID, Title: d.Title,
+		ID: d.ID, Handle: d.Handle, Name: personName(d.Name, d.Handle),
+		NameColor: d.Color, PID: d.PID, Title: d.Title,
 		Language: langCell(d.Language, d.Options, d.Toolchain),
 		Class:    class, Outcome: outcome,
 		Time: formatMS(d.TimeMS, d.TimeMin), Mem: formatKB(d.MemKB, d.MemMin), Score: score,
@@ -424,10 +428,11 @@ type submissionData struct {
 	Handle string
 	// Name is who the page credits with this run, which for a cancelled account is
 	// not its handle: that login name may already belong to someone else.
-	Name     string
-	PID      string
-	Title    string
-	Language string
+	Name      string
+	NameColor string
+	PID       string
+	Title     string
+	Language  string
 	// Version 是这次判完能引用的那句实话："C++17 · O2 开"。老数据也有，因为它的默认
 	// 口径正是把版本拆成选项之前硬编码的那一条命令行。
 	Version   string
@@ -497,7 +502,8 @@ func (s *Server) submissionPage(w http.ResponseWriter, r *http.Request, a actor,
 	}
 
 	s.page(w, r, http.StatusOK, fmt.Sprintf("提交 #%d", d.ID), "submission", a.viewer(), "", submissionData{
-		ID: d.ID, Handle: d.Handle, Name: personName(d.Name, d.Handle), PID: d.PID, Title: d.Title,
+		ID: d.ID, Handle: d.Handle, Name: personName(d.Name, d.Handle), NameColor: d.Color,
+		PID: d.PID, Title: d.Title,
 		Language: d.Language, Version: toolchainCell(d.Language, d.Toolchain, d.Options),
 		Class: class, Outcome: outcome, Headline: headline,
 		Time: formatMS(d.TimeMS, d.TimeMin), Mem: formatKB(d.MemKB, d.MemMin), Score: score,
@@ -536,12 +542,16 @@ func verdictSentence(v string) string {
 // --- leaderboard ---
 
 type rankRowView struct {
-	Rank    int
-	Handle  string
-	Name    string
-	Solved  int
-	Submits int
-	LastAC  string
+	Rank      int
+	Handle    string
+	Name      string
+	NameColor string
+	Solved    int
+	Submits   int
+	// Points 是后台算好的活跃度：排行榜按做题数排，但那一列已经不再唯一说明"谁在这站
+	// 上花的时间多"，所以两个数都给，各自说各自的事。
+	Points int
+	LastAC string
 }
 
 func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
@@ -556,7 +566,8 @@ func (s *Server) handleRank(w http.ResponseWriter, r *http.Request) {
 		if row.LastAC != 0 {
 			last = agoMS(row.LastAC)
 		}
-		rows = append(rows, rankRowView{Rank: i + 1, Handle: row.Handle, Name: personName(row.Name, row.Handle), Solved: row.Solved, Submits: row.Submits, LastAC: last})
+		rows = append(rows, rankRowView{Rank: i + 1, Handle: row.Handle, Name: personName(row.Name, row.Handle),
+			NameColor: row.Color, Solved: row.Solved, Submits: row.Submits, Points: row.Points, LastAC: last})
 	}
 	s.page(w, r, http.StatusOK, "排行榜", "rank", s.viewerOf(r), "", map[string]any{"Rows": rows})
 }
@@ -585,11 +596,17 @@ type userData struct {
 	Solved        int
 	TotalProblems int
 	Submits       int
-	Tally         []tallyView
-	SolvedList    []solvedView
-	Recent        []subRow
-	Posts         []postRow
-	IsSelf        bool
+	// Points 与 Dims 是后台算好的活跃度与它的四维明细：个人页把"分是怎么来的"摊开，
+	// 一个人不必猜自己为什么是绿的、别人为什么是红的。
+	Points int
+	Dims   []store.Dim
+	// NameColor 是这个名字该渲染成哪一档。
+	NameColor  string
+	Tally      []tallyView
+	SolvedList []solvedView
+	Recent     []subRow
+	Posts      []postRow
+	IsSelf     bool
 	// CheckInStreak and CheckInTotal are the daily punch-in record.
 	CheckInStreak int
 	CheckInTotal  int
@@ -714,6 +731,7 @@ func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
 		// user_id produced, but nobody can follow, message or log in as it.
 		Cancelled: u.IsCancelled(),
 		Solved:    len(solved), TotalProblems: totalProblems, Submits: submits,
+		Points: u.Points, Dims: u.Dims(), NameColor: u.ColorClass(),
 		Tally: tallyRows, SolvedList: solvedList, Recent: rows,
 		Posts:     postRows(myPosts, a),
 		IsSelf:    a.User.ID == u.ID,

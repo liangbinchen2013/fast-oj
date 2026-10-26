@@ -159,6 +159,11 @@ var auditLabels = map[string]string{
 	"role.change":            "改角色",
 	"user.status":            "改账号状态",
 	"user.tags":              "改用户标签",
+	// 名字颜色：紫=以管理员身份出现在每一处署名，棕=被处罚。这两条要留痕，因为它们改的
+	// 是"别人怎么看待这个人"，而不是"他能做什么"——恰恰是最容易口头否认的那类改动。
+	"user.color":             "改名字颜色",
+	"points.save":            "保存积分参数",
+	"points.refresh":         "重算积分",
 	"account.cancel":         "注销账号",
 	"ip.ban":                 "封禁 IP",
 	"ip.unban":               "解封 IP",
@@ -184,7 +189,8 @@ var auditLabels = map[string]string{
 // things someone did on purpose first, then the refusals.
 var auditActions = []string{
 	"perm.grant", "perm.revoke", "perm.clear", "role.change", "user.status", "user.tags",
-	"account.cancel", "ip.ban", "ip.unban", "site.save",
+	"user.color", "account.cancel", "ip.ban", "ip.unban", "site.save",
+	"points.save", "points.refresh",
 	"judge_program.save", "judge_program.remove",
 	"case.delete", "cases.wipe", "problem.delete",
 	"contest.delete", "contest.problem.remove",

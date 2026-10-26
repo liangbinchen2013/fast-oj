@@ -1,19 +1,21 @@
 {{define "content"}}
 <h1>排行榜</h1>
-<p class="meta">按去重后的 AC 题目数排名，同数则提交少者在前。</p>
+<p class="meta">按去重后的 AC 题目数排名，同数则提交少者在前。名字的颜色是活跃度档位（蓝→绿→橙→红），
+  紫和棕由管理员指定；积分是它的读数，口径由管理员在 /admin/points 调。</p>
 
 <table>
-  <tr><th class="num">名次</th><th>用户</th><th class="num">解题</th><th class="num">提交</th><th>最近 AC</th></tr>
+  <tr><th class="num">名次</th><th>用户</th><th class="num">解题</th><th class="num">提交</th><th class="num">积分</th><th>最近 AC</th></tr>
   {{range .Data.Rows}}
   <tr>
     <td class="num">{{.Rank}}</td>
-    <td><a href="/u/{{.Handle}}">{{.Name}}</a></td>
+    <td><a class="pt-{{.NameColor}}" href="/u/{{.Handle}}">{{.Name}}</a></td>
     <td class="num">{{.Solved}}</td>
     <td class="num">{{.Submits}}</td>
+    <td class="num">{{.Points}}</td>
     <td>{{.LastAC}}</td>
   </tr>
   {{else}}
-  <tr><td colspan="5">还没有人 AC 过题目。</td></tr>
+  <tr><td colspan="6">还没有人 AC 过题目。</td></tr>
   {{end}}
 </table>
 {{end}}

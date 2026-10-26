@@ -22,6 +22,8 @@ type postRow struct {
 	ID          int64
 	Author      string
 	DisplayName string
+	// Color 是这个名字的活跃度档位类名，直接拼进 class（store.colorSQL 已经把它收进那六个词）。
+	Color       string
 	When        string
 	Body        template.HTML
 	CanDelete   bool
@@ -38,7 +40,7 @@ func postRows(posts []store.Post, a actor) []postRow {
 			name = p.DisplayName
 		}
 		rows = append(rows, postRow{
-			ID: p.ID, Author: p.Author, DisplayName: name, When: agoMS(p.CreatedAt),
+			ID: p.ID, Author: p.Author, DisplayName: name, Color: p.Color, When: agoMS(p.CreatedAt),
 			Body:        renderMarkdownHTML(p.Body),
 			CanDelete:   a.User.ID == p.AuthorID,
 			CanModerate: a.can(permFeedModerate),

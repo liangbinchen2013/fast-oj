@@ -138,6 +138,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/site", s.handleSiteSave)
 	// 测试发信：POST 才动网络，配置与收件地址都不进 URL。
 	mux.HandleFunc("POST /admin/site/test-email", s.handleSiteTestEmail)
+	// 积分与颜色：调参数、看预览、按管理员设的间隔自己重算。
+	mux.HandleFunc("GET /admin/points", s.handleAdminPoints)
+	mux.HandleFunc("POST /admin/points", s.handleAdminPointsSave)
 
 	mux.HandleFunc("GET /messages", s.handleInbox)
 	mux.HandleFunc("GET /messages/{handle}", s.handleThread)
@@ -184,6 +187,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/users/{handle}/status", s.handleAdminStatusChange)
 	// 标签：别人怎么称呼这个人。要 user.manage，但不进那道 2 分钟身份确认（见 admin.go）。
 	mux.HandleFunc("POST /admin/users/{handle}/tags", s.handleAdminTags)
+	// 名字颜色：紫（管理员）与棕（处罚）只能在这里由管理员指定，蓝绿橙红归积分自动改。
+	mux.HandleFunc("POST /admin/users/{handle}/color", s.handleAdminUserColor)
 	mux.HandleFunc("POST /admin/users/{handle}/cancel", s.handleAdminCancel)
 	// 批量建号：一个班 40 个学生，不该用注册表单填 40 遍。
 	mux.HandleFunc("GET /admin/accounts/new", s.handleAccountsNew)
@@ -286,14 +291,17 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		"  GET  /messages                私信收件箱；/messages/{handle} 一对一对话",
 		"  POST /messages/{handle}       发一条私信（受收信策略限制）",
 		"  GET  /login /register         登录 / 注册",
-		"  GET  /settings                个人资料、密码、私信策略",
-		"  GET  /settings                个人资料、密码、私信策略、邮箱验证状态",
+		"  POST /verify                  人机验证窗里那一下勾选：等待没结束就不认，令牌一次性的",
+		"  GET  /settings                个人资料、密码、私信策略、配色、邮箱验证状态",
+		"  POST /settings/theme          保存自己那九格颜色与明暗模式：只有他本人看到的页面跟着变",
 		"  POST /settings/email/resend   重新发送验证邮件（只发给自己账号上的地址，旧链接作废）",
 		"  GET  /verify?token=…          邮件里的验证链接：点一次生效，用过或过期就说清楚",
 		"  POST /checkin                 每日打卡（漏卡 n 天扣 3^n 连续天数）",
 		"  GET  /admin/site              站点设置（site.settings）",
 		"  POST /admin/site              保存站点设置：功能开关 + 发信（SMTP）配置",
 		"  POST /admin/site/test-email   按表单里刚填的值发一封测试邮件，失败原因原样显示在这一页",
+		"  GET  /admin/points            积分与颜色：四个维度的单位分与上限、衰减、重算间隔、档位门槛（site.settings）",
+		"  POST /admin/points            保存参数 / 只重算 / 保存并立即重算，页面下面是分值从高到低的预览",
 		"  GET  /admin/claim             首次接管：用管理令牌给 admin 账号设网页密码",
 		"  GET  /admin/perms             权限控制台（permission.manage）",
 		"  GET  /admin/stats             站点统计：人数、提交、人均、判定分布、GET/POST 请求量（stats.view）",
@@ -301,9 +309,12 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		"  POST /admin/ips/ban         封一个 IP 或 CIDR 网段（整站拦死）",
 		"  POST /admin/ips/unban/{ip}  解封",
 		"  GET  /admin/audit            安全审计流水（ip.manage）：谁在什么时候动了谁的权限、账号、题目与站点设置；只读、只追加",
-		"  POST /admin/perms/u/{handle}  授予/撤销/清除单项能力",
+		"  POST /admin/perms/u/{handle}  授予/撤销/清除单项能力（要 2 分钟内确认过身份）",
+		"  POST /admin/perms/unlock      改权限、改角色、改状态、注销之前的身份再确认：密码只写在这个会话上",
 		"  POST /admin/users/{handle}/role|status  改角色 / 封禁解禁（超级管理员除外）",
 		"  POST /admin/users/{handle}/cancel  注销账号：抹掉身份、释放用户名，记录留着署名成封禁用户",
+		"  POST /admin/users/{handle}/tags  改这个人名字后面的标签，形如 admin [作弊者]（user.manage）",
+		"  POST /admin/users/{handle}/color  手动指定名字颜色：紫（管理员）、棕（处罚），或放回跟着积分走",
 		"  GET  /admin/accounts/new      批量建号表单（user.manage）",
 		"  POST /admin/accounts          一次建一批：名单模式或前缀+个数模式，初始密码只在这页出现一次",
 		"  GET  /judges                  判机框列表（judge.view）",

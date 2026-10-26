@@ -100,6 +100,7 @@ func (s *Server) handleThread(w http.ResponseWriter, r *http.Request) {
 	s.page(w, r, http.StatusOK, peer.Handle, "message_thread", a.viewer(), msgOf(r), map[string]any{
 		"Peer":     peer.Handle,
 		"PeerName": nameOf(peer),
+		"PeerColor": peer.ColorClass(),
 		"Messages": rows,
 		"CanSend":  may && peer.ID != a.User.ID,
 		// 站级开关关掉私信时，页面上要留一句原因，而不是一个只会 403 的输入框。

@@ -514,3 +514,57 @@ func (db *DB) SetUserColor(ctx context.Context, userID int64, color string) erro
 	_, err := db.SQL.ExecContext(ctx, `UPDATE users SET color=? WHERE id=?`, color, userID)
 	return err
 }
+
+// PointsRow 是调参那一页里的一行预览：一个人现在的分、四个维度怎么来的、什么颜色。
+type PointsRow struct {
+	UserID int64  `json:"user_id"`
+	Handle string `json:"handle"`
+	Name   string `json:"name"`
+	Points int    `json:"points"`
+	Dims   []Dim  `json:"dims"`
+	Color  string `json:"color"`
+	// Locked 是"这一档是管理员指定的"，页面上要说明白，否则调阈值的人会以为颜色没跟着动
+	// 是重算没跑。
+	Locked bool `json:"locked"`
+}
+
+// ColorClass 是这一行渲染名字时用的类名。
+func (r PointsRow) ColorClass() string { return ColorClass(r.Color) }
+
+// PointsBoard 按分值从高到低给人，并带回最后一次重算的时刻。
+//
+// 这一页存在的意义是"调完参数能立刻看见效果"：上限、单位分、门槛这些东西只在数字上看着
+// 合理，管理员要的是看一眼谁因此变绿了。一次查询，读的是已经算好的列。
+func (db *DB) PointsBoard(ctx context.Context, limit int) ([]PointsRow, int64, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 50
+	}
+	var lastAt int64
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT IFNULL(MAX(points_at), 0) FROM users`).Scan(&lastAt); err != nil {
+		return nil, 0, err
+	}
+	rows, err := db.SQL.QueryContext(ctx,
+		`SELECT u.id, u.handle, `+personSQL(`u`)+`, IFNULL(u.points, 0), IFNULL(u.points_parts, ''), IFNULL(u.color, '')
+		 FROM users u WHERE u.role <> 'judge' AND u.status <> 'deleted'
+		 ORDER BY IFNULL(u.points, 0) DESC, u.id LIMIT ?`, limit)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var out []PointsRow
+	for rows.Next() {
+		var (
+			r     PointsRow
+			parts string
+		)
+		if err := rows.Scan(&r.UserID, &r.Handle, &r.Name, &r.Points, &parts, &r.Color); err != nil {
+			return nil, 0, err
+		}
+		r.Dims = ParseParts(parts)
+		r.Locked = IsLocked(r.Color)
+		out = append(out, r)
+	}
+	return out, lastAt, rows.Err()
+}

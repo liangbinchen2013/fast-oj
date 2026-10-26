@@ -23,7 +23,7 @@
       <a href="/topics/{{.ID}}">{{.Title}}</a>
       {{if .HasProblem}}<span class="meta">（<a href="/problems/{{.ProblemPID}}">{{.ProblemPID}}</a>）</span>{{end}}
     </td>
-    <td><a href="/u/{{.Author}}">{{.DisplayName}}</a></td>
+    <td><a class="pt-{{.Color}}" href="/u/{{.Author}}">{{.DisplayName}}</a></td>
     <td class="num">{{.Comments}}</td>
     <td>{{.When}}</td>
     {{if $.Me}}

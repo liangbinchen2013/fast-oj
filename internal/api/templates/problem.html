@@ -79,7 +79,7 @@
   {{range .Data.Recent}}
   <tr>
     <td><a href="/submissions/{{.ID}}">{{.ID}}</a></td>
-    <td><a href="/u/{{.Handle}}">{{.Name}}</a></td>
+    <td><a class="pt-{{.NameColor}}" href="/u/{{.Handle}}">{{.Name}}</a></td>
     <td>{{.Language}}</td>
     <td><span class="badge {{.Class}}">{{.Outcome}}</span></td>
     <td class="num">{{.Time}}</td>

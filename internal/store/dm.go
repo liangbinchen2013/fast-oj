@@ -56,10 +56,12 @@ type DMThread struct {
 	PeerID   int64  `json:"peer_id"`
 	Peer     string `json:"peer"`
 	PeerName string `json:"peer_name"`
-	Last     string `json:"last"`
-	LastAt   int64  `json:"last_at"`
-	Unread   int    `json:"unread"`
-	FromMe   bool   `json:"from_me"`
+	// PeerColor 是这个人的活跃度档位（见 feed.go 里同名的理由）。
+	PeerColor string `json:"peer_color,omitempty"`
+	Last      string `json:"last"`
+	LastAt    int64  `json:"last_at"`
+	Unread    int    `json:"unread"`
+	FromMe    bool   `json:"from_me"`
 }
 
 const dmColumns = `d.id, d.sender_id, su.handle, d.recipient_id, ru.handle, d.body, d.created_at,
@@ -154,7 +156,7 @@ func (db *DB) ListDMThreads(ctx context.Context, meID int64, limit int) ([]DMThr
 		   SELECT peer, MAX(id) AS last_id, SUM(unread) AS unread FROM m GROUP BY peer
 		   ORDER BY last_id DESC LIMIT ?
 		 )
-		 SELECT g.peer, g.unread, m.body, m.created_at, m.sender_id, u.handle, `+personSQL(`u`)+`
+		 SELECT g.peer, g.unread, m.body, m.created_at, m.sender_id, u.handle, `+personSQL(`u`)+`, `+colorSQL(`u`)+`
 		   FROM g JOIN m ON m.id=g.last_id JOIN users u ON u.id=g.peer
 		  ORDER BY g.last_id DESC`, meID, meID, meID, meID, limit)
 	if err != nil {
@@ -168,7 +170,7 @@ func (db *DB) ListDMThreads(ctx context.Context, meID int64, limit int) ([]DMThr
 			t        DMThread
 			senderID int64
 		)
-		if err := rows.Scan(&t.PeerID, &t.Unread, &t.Last, &t.LastAt, &senderID, &t.Peer, &t.PeerName); err != nil {
+		if err := rows.Scan(&t.PeerID, &t.Unread, &t.Last, &t.LastAt, &senderID, &t.Peer, &t.PeerName, &t.PeerColor); err != nil {
 			return nil, err
 		}
 		t.FromMe = senderID == meID

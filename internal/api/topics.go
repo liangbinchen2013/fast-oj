@@ -34,8 +34,10 @@ type topicRow struct {
 	Title       string
 	Author      string
 	DisplayName string
-	When        string
-	Comments    int
+	// Color 是这个名字的活跃度档位类名（见 feed.go 里同名的理由）。
+	Color     string
+	When      string
+	Comments  int
 	HasProblem  bool
 	ProblemPID  string
 	ProblemName string
@@ -54,7 +56,7 @@ func topicRows(items []store.Topic, a actor) []topicRow {
 		}
 		rows = append(rows, topicRow{
 			ID: t.ID, Kind: t.Kind, KindLabel: store.TopicKindLabel(t.Kind),
-			Title: t.Title, Author: t.Author, DisplayName: name,
+			Title: t.Title, Author: t.Author, DisplayName: name, Color: t.Color,
 			When: agoMS(t.CreatedAt), Comments: t.Comments,
 			HasProblem: t.ProblemID != 0, ProblemPID: t.ProblemPID, ProblemName: t.ProblemTitle,
 			CanDelete: a.User.ID != 0 && (a.User.ID == t.AuthorID || a.can(permTopicModerate)),
@@ -329,6 +331,8 @@ type topicData struct {
 	Title       string
 	Author      string
 	DisplayName string
+	// Color 是名字的活跃度档位类名。
+	Color       string
 	When        string
 	Body        template.HTML
 	HasProblem  bool
@@ -350,7 +354,7 @@ func (s *Server) handleTopicGet(w http.ResponseWriter, r *http.Request) {
 	}
 	d := topicData{
 		ID: topic.ID, Kind: topic.Kind, KindLabel: store.TopicKindLabel(topic.Kind),
-		Title: topic.Title, Author: topic.Author, When: agoMS(topic.CreatedAt),
+		Title: topic.Title, Author: topic.Author, Color: topic.Color, When: agoMS(topic.CreatedAt),
 		Body:       renderMarkdownHTML(topic.Body),
 		HasProblem: topic.ProblemID != 0, ProblemPID: topic.ProblemPID, ProblemName: topic.ProblemTitle,
 		CanDelete: a.User.ID != 0 && (a.User.ID == topic.AuthorID || a.can(permTopicModerate)),
@@ -436,6 +440,7 @@ type commentRow struct {
 	ID          int64
 	Author      string
 	DisplayName string
+	Color       string
 	When        string
 	Body        template.HTML
 	CanDelete   bool
@@ -449,7 +454,7 @@ func commentRows(items []store.TopicComment, a actor) []commentRow {
 			name = c.DisplayName
 		}
 		rows = append(rows, commentRow{
-			ID: c.ID, Author: c.Author, DisplayName: name, When: agoMS(c.CreatedAt),
+			ID: c.ID, Author: c.Author, DisplayName: name, Color: c.Color, When: agoMS(c.CreatedAt),
 			Body: renderMarkdownHTML(c.Body),
 			// The author may always take their own words back; anyone else needs the
 			// moderation right.

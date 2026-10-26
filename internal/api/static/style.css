@@ -14,6 +14,14 @@
   --ok: #1c7a3e;
   --bad: #b3261e;
   --warn: #8a6100;
+  /* 名字颜色的六档（users.color 那一列存的就是这些词，见 0034）。放在这三层里而不是各写
+     一份：浅色底子要深一点的色，深色底子要亮的色，同一档在两种底色下不是同一个字面值。 */
+  --pt-blue: #1a56b4;
+  --pt-green: #1c7a3e;
+  --pt-orange: #a8590a;
+  --pt-red: #b3261e;
+  --pt-purple: #6b3fa8;
+  --pt-brown: #7a4a21;
   color-scheme: light;
 }
 [data-theme=dark] {
@@ -26,6 +34,12 @@
   --ok: #6dd58c;
   --bad: #ff8a80;
   --warn: #e6c15c;
+  --pt-blue: #7fb0ff;
+  --pt-green: #6dd58c;
+  --pt-orange: #f0a848;
+  --pt-red: #ff8a80;
+  --pt-purple: #c39bf2;
+  --pt-brown: #d0a177;
   color-scheme: dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -39,6 +53,12 @@
     --ok: #6dd58c;
     --bad: #ff8a80;
     --warn: #e6c15c;
+    --pt-blue: #7fb0ff;
+    --pt-green: #6dd58c;
+    --pt-orange: #f0a848;
+    --pt-red: #ff8a80;
+    --pt-purple: #c39bf2;
+    --pt-brown: #d0a177;
     color-scheme: dark;
   }
 }
@@ -91,6 +111,15 @@ pre code { background: none; padding: 0; }
 .AC { color: var(--ok); }
 .WA, .RE, .MLE, .TLE, .CE, .IE { color: var(--bad); }
 .queued, .compiling, .running { color: var(--warn); }
+/* 名字的六档 = 活跃度的读数（见 internal/store/points.go）。权重那一路已经用字重表达了
+   新旧，颜色只在人名上说话，所以这里不加重也不加边框：一个班三十个人的页面上，六七个
+   加粗的名字只会把真正的重点冲淡。 */
+.pt-blue { color: var(--pt-blue); }
+.pt-green { color: var(--pt-green); }
+.pt-orange { color: var(--pt-orange); }
+.pt-red { color: var(--pt-red); }
+.pt-purple { color: var(--pt-purple); }
+.pt-brown { color: var(--pt-brown); }
 form { margin-top: 1.5rem; }
 label { display: block; margin-bottom: .35rem; color: var(--muted); font-size: .9rem; }
 /* Every text-like field gets the same box: an email or password input that falls

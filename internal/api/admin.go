@@ -19,6 +19,10 @@ type adminUserRow struct {
 	Email  string
 	Role   string
 	Status string
+	// Points 与 ColorClass 是活跃度那一维：权限控制台是管理员找人最多的地方，"这个人现在
+	// 是红的、多少分"在这里比在别处更有用。
+	Points     int
+	ColorClass string
 	// Owner marks the super admin: the one account the console cannot touch.
 	Owner bool
 }
@@ -44,6 +48,7 @@ func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		rows = append(rows, adminUserRow{
 			ID: u.ID, Handle: u.Handle, Email: u.Email, Role: u.Role, Status: u.Status,
+			Points: u.Points, ColorClass: u.ColorClass(),
 			Owner: u.ID == ownerID,
 		})
 	}
@@ -97,6 +102,10 @@ func (s *Server) handleAdminUser(w http.ResponseWriter, r *http.Request) {
 		"MaxTags":    store.MaxTags,
 		"MaxTagLen":  store.MaxTagLen,
 		"MaxTagText": store.MaxTagsText,
+		// 名字颜色：只有"自动 / 紫 / 棕"三个选项，其余四档是积分的读数，由后台算。
+		"Color":        u.Color,
+		"ColorClass":   u.ColorClass(),
+		"ColorOptions": colorOptions(),
 		// NeedStepUp 决定这一页摆的是密码框还是那排改权限的按钮：判断与 requireStepUp
 		// 用的是同一个函数，所以页面和闸门不会各说一套。
 		"NeedStepUp": !stepUpOK(a),

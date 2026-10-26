@@ -107,6 +107,10 @@ type RankRow struct {
 	Solved  int    `json:"solved"`
 	Submits int    `json:"submits"`
 	LastAC  int64  `json:"last_ac"`
+	// Points 与 Color 是后台算好的活跃度与它的读数：排行榜本来就在读这一行 users，
+	// 带出来不多一次查询，而"名字的颜色"在这里必须和别处一致。
+	Points int    `json:"points"`
+	Color  string `json:"color,omitempty"`
 }
 
 // Leaderboard ranks people by the number of distinct problems they have AC'd.
@@ -121,7 +125,8 @@ func (db *DB) Leaderboard(ctx context.Context, limit int) ([]RankRow, error) {
 		`SELECT u.id, u.handle, `+personSQL("u")+`,
 		        (SELECT COUNT(DISTINCT s.problem_id) FROM submissions s WHERE s.user_id=u.id AND s.verdict='AC'),
 		        (SELECT COUNT(*) FROM submissions s WHERE s.user_id=u.id),
-		        (SELECT MAX(s.judged_at) FROM submissions s WHERE s.user_id=u.id AND s.verdict='AC')
+		        (SELECT MAX(s.judged_at) FROM submissions s WHERE s.user_id=u.id AND s.verdict='AC'),
+		        IFNULL(u.points, 0), `+colorSQL("u")+`
 		 FROM users u
 		 WHERE u.role <> 'judge'
 		 ORDER BY 4 DESC, 5 ASC, u.id ASC
@@ -137,7 +142,8 @@ func (db *DB) Leaderboard(ctx context.Context, limit int) ([]RankRow, error) {
 			r      RankRow
 			lastAC sql.NullInt64
 		)
-		if err := rows.Scan(&r.UserID, &r.Handle, &r.Name, &r.Solved, &r.Submits, &lastAC); err != nil {
+		if err := rows.Scan(&r.UserID, &r.Handle, &r.Name, &r.Solved, &r.Submits, &lastAC,
+			&r.Points, &r.Color); err != nil {
 			return nil, err
 		}
 		r.LastAC = nullTime(lastAC)
