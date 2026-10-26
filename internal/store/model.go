@@ -28,6 +28,27 @@ type User struct {
 	// Tags 是管理员贴在这个人身上的标签原文（英文逗号分隔，见 tags.go）。它已经在 personSQL
 	// 里跟着名字拼好了，这里留着是给 Go 侧自己拼名字的几处用的（关注列表、私信、导航栏）。
 	Tags string `json:"tags,omitempty"`
+	// Points 是后台按当前参数算出来的活跃度（含衰减），Color 是它的读数（或者管理员锁
+	// 上去的 purple/brown）。两列都在 users 行上，所以显示它们不多一次查询。
+	// PointsParts 是四个维度的明细原文（ac=..,sub=..,…），个人页用它把"分是怎么来的"摊开。
+	Points      int    `json:"points"`
+	PointsParts string `json:"-"`
+	Color       string `json:"color,omitempty"`
+}
+
+// ColorClass 是渲染名字时用的那一档：库里存的空串表示"最低一档"，页面需要一个类名，
+// 于是这里补上 blue。除 blue 外的每个词都直接来自库里，而库里只可能是这六个词之一
+// （写入侧 ValidColor / RefreshPoints 都拦过），所以它能安全地拼进 class。
+func (u User) ColorClass() string { return ColorClass(u.Color) }
+
+// ColorClass 是 ColorClass 的自由函数版本，给只拿到一个字符串（不是整个 User）的视图用。
+func ColorClass(color string) string {
+	for _, c := range colorTokens {
+		if c == color {
+			return c
+		}
+	}
+	return "blue"
 }
 
 // TagSuffix 是名字后面那一段：` [作弊者] [新生]`，没有标签时是空串。

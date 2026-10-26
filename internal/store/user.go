@@ -19,9 +19,11 @@ const BootstrapHandle = "admin"
 // same answer: a row this feature did not write — an account created before M25f, one
 // made by 批量建号, the token account — reads as verified, and nobody is locked out by
 // a column that was only ever meant to gate new registrations.
+// 积分与颜色一起读出来：它们是"这个人现在该显示成什么样子"的一部分，而每个显示名字的地方
+// 本来就拿着这一行。分开查会让每一页多一次查询，只为了拿两个已经在 users 上的标量。
 const userColumns = `id, handle, IFNULL(email, ''), display_name, bio, role, status, dm_policy,
 		(passhash <> '') AS has_password, IFNULL(email_verified, 1), created_at, IFNULL(last_login_at, 0),
-		IFNULL(theme, ''), IFNULL(tags, '')`
+		IFNULL(theme, ''), IFNULL(tags, ''), IFNULL(points, 0), IFNULL(points_parts, ''), IFNULL(color, '')`
 
 func scanUser(row scanner) (User, error) {
 	var (
@@ -30,7 +32,8 @@ func scanUser(row scanner) (User, error) {
 		verifiedMS int
 	)
 	err := row.Scan(&u.ID, &u.Handle, &u.Email, &u.DisplayName, &u.Bio, &u.Role, &u.Status,
-		&u.DMPolicy, &hasPass, &verifiedMS, &u.CreatedAt, &u.LastLoginAt, &u.Theme, &u.Tags)
+		&u.DMPolicy, &hasPass, &verifiedMS, &u.CreatedAt, &u.LastLoginAt,
+		&u.Theme, &u.Tags, &u.Points, &u.PointsParts, &u.Color)
 	u.HasPassword = hasPass != 0
 	u.EmailVerified = verifiedMS != 0
 	return u, notFound(err)
@@ -135,7 +138,8 @@ func (db *DB) CancelAccount(ctx context.Context, userID int64) (string, error) {
 	err := db.InTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE users SET handle=?, email=NULL, passhash='', display_name=?, bio='',
-			                        status='deleted', dm_policy='off', last_login_at=NULL, theme='', tags=''
+			                        status='deleted', dm_policy='off', last_login_at=NULL,
+			                        theme='', tags='', points=0, points_parts='', color=''
 			 WHERE id=?`, handle, AnonymousName, userID); err != nil {
 			return err
 		}

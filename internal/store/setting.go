@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -60,6 +61,9 @@ type SiteConfig struct {
 	// that may not be configured yet.
 	RequireEmailVerify bool       `json:"require_email_verify"`
 	SMTP               SMTPConfig `json:"smtp"`
+	// Points 是积分那一组可调参数（见 points.go）。放在这里而不是单独一个 getter：
+	// 它和站点名字一样存在 site_settings 里，同一次查询就能全读出来。
+	Points PointsConfig `json:"points"`
 }
 
 // DefaultAPIHint is the footer line a fresh site shows. 纯文本 API 与 ?format=json
@@ -183,7 +187,41 @@ func (db *DB) Site(ctx context.Context) (SiteConfig, error) {
 			From:     values[setSMTPFrom],
 			TLSMode:  values[setSMTPTLS],
 		},
+		// 积分参数缺行时全部落在默认值上（ParsePoints 逐行兜底），所以一个从没进过
+		// /admin/points 的站点也能直接按默认口径算分。
+		Points: ParsePoints(values),
 	}, nil
+}
+
+// settingWrite 是一行要写进 settings 的键值。
+type settingWrite struct{ key, value string }
+
+// setMany 一次事务写进行数设置：半套参数比一套旧的更难看——管理员保存一次就该全生效。
+func (db *DB) setMany(ctx context.Context, byUserID int64, rows []settingWrite) error {
+	return db.InTx(ctx, func(tx *sql.Tx) error {
+		for _, w := range rows {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO site_settings (key, value, updated_at, updated_by) VALUES (?, ?, ?, ?)
+				 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at,
+				                                   updated_by=excluded.updated_by`,
+				w.key, w.value, nowMS(), nullInt64(byUserID)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// SetPointsConfig 存下管理员调的那一组积分参数。归一化在这一个地方做：不管从哪条路径进来，
+// 写进库的总是一套能算的形状。
+func (db *DB) SetPointsConfig(ctx context.Context, byUserID int64, cfg PointsConfig) error {
+	rows := make([]settingWrite, 0, 16)
+	for k, v := range cfg.Normalized().Writes() {
+		rows = append(rows, settingWrite{k, v})
+	}
+	// map 的顺序是随机的，排一下：同样的输入写出同样的顺序，日志和测试才有可比性。
+	sort.Slice(rows, func(i, j int) bool { return rows[i].key < rows[j].key })
+	return db.setMany(ctx, byUserID, rows)
 }
 
 // SetSiteAll writes the whole form in one transaction, so a half-saved settings
@@ -197,7 +235,7 @@ func (db *DB) SetSiteAll(ctx context.Context, byUserID int64, in SiteConfig) err
 	if err != nil {
 		return err
 	}
-	writes := []struct{ key, value string }{
+	writes := []settingWrite{
 		{setTitle, in.Title},
 		{setTagline, in.Tagline},
 		{setFooter, in.Footer},
@@ -216,16 +254,5 @@ func (db *DB) SetSiteAll(ctx context.Context, byUserID int64, in SiteConfig) err
 		{setSMTPFrom, strings.TrimSpace(in.SMTP.From)},
 		{setSMTPTLS, in.SMTP.TLSMode},
 	}
-	return db.InTx(ctx, func(tx *sql.Tx) error {
-		for _, w := range writes {
-			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO site_settings (key, value, updated_at, updated_by) VALUES (?, ?, ?, ?)
-				 ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at,
-				                                   updated_by=excluded.updated_by`,
-				w.key, w.value, nowMS(), nullInt64(byUserID)); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	return db.setMany(ctx, byUserID, writes)
 }
