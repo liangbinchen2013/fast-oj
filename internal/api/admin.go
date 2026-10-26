@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -23,7 +24,9 @@ type adminUserRow struct {
 }
 
 func (s *Server) handleAdminUsers(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.requirePerm(w, r, permPermissionManage)
+	// 这一页对两种管理员都有意义：permission.manage 来看和改能力，user.manage 来改角色、
+	// 状态、标签和注销。所以门槛是"任意一把"，具体哪几个按钮出现由下面的能力位决定。
+	a, ok := s.requireAnyPerm(w, r, permPermissionManage, permUserManage)
 	if !ok {
 		return
 	}
@@ -59,7 +62,7 @@ type grantRow struct {
 }
 
 func (s *Server) handleAdminUser(w http.ResponseWriter, r *http.Request) {
-	a, ok := s.requirePerm(w, r, permPermissionManage)
+	a, ok := s.requireAnyPerm(w, r, permPermissionManage, permUserManage)
 	if !ok {
 		return
 	}
@@ -86,6 +89,14 @@ func (s *Server) handleAdminUser(w http.ResponseWriter, r *http.Request) {
 		"Cancelled": u.IsCancelled(),
 		"Anonym":    store.AnonymousName,
 		"CanUser":   a.can(permUserManage),
+		// CanPerm 决定那排"授予/收回/恢复默认"的按钮出不出现：能改角色与标签的人不必
+		// 也能改能力，两件事分开授权。
+		"CanPerm": a.can(permPermissionManage),
+		// 标签给的是原文（逗号分隔），管理员看到的输入框就是他自己上次写的那样。
+		"Tags":       u.Tags,
+		"MaxTags":    store.MaxTags,
+		"MaxTagLen":  store.MaxTagLen,
+		"MaxTagText": store.MaxTagsText,
 		// NeedStepUp 决定这一页摆的是密码框还是那排改权限的按钮：判断与 requireStepUp
 		// 用的是同一个函数，所以页面和闸门不会各说一套。
 		"NeedStepUp": !stepUpOK(a),
@@ -295,4 +306,39 @@ func (s *Server) handleAdminStatusChange(w http.ResponseWriter, r *http.Request)
 	s.audit(r, a, "user.status", target.Handle,
 		fmt.Sprintf("状态改为 %s（原 %s）；封禁会踢掉这个账号的所有登录会话", userStatusLabel(status), userStatusLabel(target.Status)))
 	http.Redirect(w, r, "/admin/perms/u/"+url.PathEscape(target.Handle)+"?msg="+url.QueryEscape("状态已设为 "+status), http.StatusSeeOther)
+}
+
+// handleAdminTags 改的是"别人怎么称呼这个人"，不是"他能做什么"。
+//
+// 所以它要 user.manage，但**不进那道 2 分钟的身份确认**：那扇门是给权限、角色、状态、注销
+// 准备的——那些一改就改变一个人能做的事。标签贴错随时能改回来，也不会让任何人多出一点权力；
+// 把它一起关进门里，只会让管理员每贴一个标签都要重输一次密码。
+func (s *Server) handleAdminTags(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.requirePerm(w, r, permUserManage)
+	if !ok {
+		return
+	}
+	target, ok := s.adminTarget(w, r, a)
+	if !ok {
+		return
+	}
+	back := "/admin/perms/u/" + url.PathEscape(target.Handle)
+	raw := r.FormValue("tags")
+	if err := s.db.SetUserTags(r.Context(), target.ID, raw); err != nil {
+		msg := "标签没能保存：" + err.Error()
+		switch {
+		case errors.Is(err, store.ErrTooManyTags):
+			msg = fmt.Sprintf("标签最多 %d 个，用逗号分开就行。", store.MaxTags)
+		case errors.Is(err, store.ErrBadTag):
+			msg = fmt.Sprintf("标签里有不能用的字：逗号与方括号是分隔符，单个标签最长 %d 个字。", store.MaxTagLen)
+		}
+		http.Redirect(w, r, back+"?msg="+url.QueryEscape(msg), http.StatusSeeOther)
+		return
+	}
+	// 记的是这次真的写进去的那一串（SetUserTags 会 trim、会把中文逗号归一化），
+	// 不是表单原文——审计要能回答"当时页面上显示的到底是什么"。
+	now := store.TagsTextOf(raw)
+	s.log.Info("tags changed", "by", a.User.Handle, "target", target.Handle, "from", target.Tags, "to", now)
+	s.audit(r, a, "user.tags", target.Handle, fmt.Sprintf("由 %q 改成 %q", target.Tags, now))
+	http.Redirect(w, r, back+"?msg="+url.QueryEscape("标签已保存，全站名字后面就会跟着显示。"), http.StatusSeeOther)
 }

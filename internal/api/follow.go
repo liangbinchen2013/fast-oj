@@ -11,12 +11,14 @@ import (
 )
 
 // nameOf is how a person is addressed: the nickname when they set one, the handle
-// otherwise.
+// otherwise. 管理员贴的标签接在后面——这些列表拿到的是整行 User，走不了 SQL 那一路的
+// personSQL，所以两边各自接一次，格式由 User.TagSuffix 统一。
 func nameOf(u store.User) string {
+	base := u.Handle
 	if strings.TrimSpace(u.DisplayName) != "" {
-		return u.DisplayName
+		base = u.DisplayName
 	}
-	return u.Handle
+	return base + u.TagSuffix()
 }
 
 // followHandler binds one of the two verbs to a route, so the form and a scripted

@@ -44,7 +44,7 @@
     <td>{{if eq .Override "granted"}}授予{{else if eq .Override "removed"}}收回{{else}}—{{end}}</td>
     <td><span class="badge {{if .Effective}}AC{{else}}WA{{end}}">{{if .Effective}}有{{else}}无{{end}}</span></td>
     <td>
-      {{if and (not $.Data.Self) (not $.Data.Owner) (not $.Data.NeedStepUp)}}
+      {{if and $.Data.CanPerm (not $.Data.Self) (not $.Data.Owner) (not $.Data.NeedStepUp)}}
       <form class="inline" method="post" action="/admin/perms/u/{{$.Data.Target.Handle}}">
         <input type="hidden" name="csrf" value="{{$.Me.CSRF}}">
         <input type="hidden" name="key" value="{{.Key}}">
@@ -57,6 +57,21 @@
   </tr>
   {{end}}
 </table>
+
+{{if and (not .Data.Self) (not .Data.Owner) .Data.CanUser}}
+<h2>标签</h2>
+<form class="row" method="post" action="/admin/users/{{.Data.Target.Handle}}/tags">
+  <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
+  <div style="flex: 1 1 18rem">
+    <label>显示在名字后面的短语（最多 {{.Data.MaxTags}} 个，用逗号分开，每个最长 {{.Data.MaxTagLen}} 个字）</label>
+    <input type="text" name="tags" value="{{.Data.Tags}}" maxlength="{{.Data.MaxTagText}}"
+           autocomplete="off" placeholder="例如：作弊者，退役选手">
+  </div>
+  <input type="submit" value="保存标签">
+</form>
+<p class="meta">标签不是权限：贴上"管理员"不会让这个账号多出任何能力，去掉也不会。全站凡是出现名字的地方
+  都跟着显示，形如 <b>{{.Data.Target.Handle}} [作弊者]</b>；注销账号时和身份一起抹掉。</p>
+{{end}}
 
 {{if and (not .Data.Self) (not .Data.Owner) (not .Data.NeedStepUp) .Data.CanUser}}
 <h2>角色与状态</h2>

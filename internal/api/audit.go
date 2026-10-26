@@ -158,6 +158,7 @@ var auditLabels = map[string]string{
 	"perm.clear":             "清除单项覆盖",
 	"role.change":            "改角色",
 	"user.status":            "改账号状态",
+	"user.tags":              "改用户标签",
 	"account.cancel":         "注销账号",
 	"ip.ban":                 "封禁 IP",
 	"ip.unban":               "解封 IP",
@@ -182,7 +183,7 @@ var auditLabels = map[string]string{
 // auditActions is the filter list, ordered the way an operator reads the page: the
 // things someone did on purpose first, then the refusals.
 var auditActions = []string{
-	"perm.grant", "perm.revoke", "perm.clear", "role.change", "user.status",
+	"perm.grant", "perm.revoke", "perm.clear", "role.change", "user.status", "user.tags",
 	"account.cancel", "ip.ban", "ip.unban", "site.save",
 	"judge_program.save", "judge_program.remove",
 	"case.delete", "cases.wipe", "problem.delete",

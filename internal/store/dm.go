@@ -154,7 +154,7 @@ func (db *DB) ListDMThreads(ctx context.Context, meID int64, limit int) ([]DMThr
 		   SELECT peer, MAX(id) AS last_id, SUM(unread) AS unread FROM m GROUP BY peer
 		   ORDER BY last_id DESC LIMIT ?
 		 )
-		 SELECT g.peer, g.unread, m.body, m.created_at, m.sender_id, u.handle, IFNULL(u.display_name, '')
+		 SELECT g.peer, g.unread, m.body, m.created_at, m.sender_id, u.handle, `+personSQL(`u`)+`
 		   FROM g JOIN m ON m.id=g.last_id JOIN users u ON u.id=g.peer
 		  ORDER BY g.last_id DESC`, meID, meID, meID, meID, limit)
 	if err != nil {

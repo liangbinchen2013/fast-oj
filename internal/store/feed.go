@@ -31,7 +31,9 @@ type Post struct {
 	HiddenAt    int64  `json:"hidden_at,omitempty"`
 }
 
-const postColumns = `p.id, p.author_id, u.handle, u.display_name, p.body, p.created_at,
+// postColumns 里的名字走 personSQL：那一个人"该被叫作什么"的唯一出口（注销后的墓碑署名、
+// 管理员贴的标签都在这里接上），动态流不该自己复制一套规则。
+var postColumns = `p.id, p.author_id, u.handle, ` + personSQL(`u`) + `, p.body, p.created_at,
 		p.visible, IFNULL(p.hidden_by, 0), IFNULL(p.hidden_at, 0)`
 
 func scanPost(row scanner) (Post, error) {

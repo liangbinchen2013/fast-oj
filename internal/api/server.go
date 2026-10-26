@@ -182,6 +182,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /admin/perms/u/{handle}", s.handleAdminPermChange)
 	mux.HandleFunc("POST /admin/users/{handle}/role", s.handleAdminRoleChange)
 	mux.HandleFunc("POST /admin/users/{handle}/status", s.handleAdminStatusChange)
+	// 标签：别人怎么称呼这个人。要 user.manage，但不进那道 2 分钟身份确认（见 admin.go）。
+	mux.HandleFunc("POST /admin/users/{handle}/tags", s.handleAdminTags)
 	mux.HandleFunc("POST /admin/users/{handle}/cancel", s.handleAdminCancel)
 	// 批量建号：一个班 40 个学生，不该用注册表单填 40 遍。
 	mux.HandleFunc("GET /admin/accounts/new", s.handleAccountsNew)

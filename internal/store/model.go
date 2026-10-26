@@ -25,6 +25,21 @@ type User struct {
 	// Theme 是这个人自己的配色原文（一串 key=value，见 theme.go）。它跟着每次 authenticate
 	// 一起读出来，所以渲染一个人的页面不需要第二条查询；空串是他什么都没调。
 	Theme string `json:"-"`
+	// Tags 是管理员贴在这个人身上的标签原文（英文逗号分隔，见 tags.go）。它已经在 personSQL
+	// 里跟着名字拼好了，这里留着是给 Go 侧自己拼名字的几处用的（关注列表、私信、导航栏）。
+	Tags string `json:"tags,omitempty"`
+}
+
+// TagSuffix 是名字后面那一段：` [作弊者] [新生]`，没有标签时是空串。
+//
+// SQL 那一路在 personSQL 里拼，Go 这一路调它，两边格式必须一样——名字后面的方括号是管理员
+// 贴上去的话的可见形状，不该因为走的是哪条查询而变样。
+func (u User) TagSuffix() string {
+	tags := ParseTags(u.Tags)
+	if len(tags) == 0 {
+		return ""
+	}
+	return " [" + strings.Join(tags, "] [") + "]"
 }
 
 type Problem struct {

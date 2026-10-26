@@ -139,7 +139,7 @@ type TicketFilter struct {
 	WithCount bool
 }
 
-const ticketColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, u.display_name,
+var ticketColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, ` + personSQL(`u`) + `,
 		IFNULL(t.problem_id, 0), IFNULL(p.pid, ''), IFNULL(p.title, ''),
 		IFNULL(t.submission_id, 0), t.status, IFNULL(t.handler_id, 0), IFNULL(h.handle, ''),
 		t.created_at, t.updated_at`
@@ -377,7 +377,7 @@ func (db *DB) DeleteTicket(ctx context.Context, id int64) (bool, error) {
 // down like everything else a human wrote.
 func (db *DB) ListTicketReplies(ctx context.Context, ticketID int64) ([]TicketReply, error) {
 	rows, err := db.SQL.QueryContext(ctx,
-		`SELECT r.id, r.ticket_id, r.author_id, u.handle, u.display_name, r.body, r.event, r.created_at
+		`SELECT r.id, r.ticket_id, r.author_id, u.handle, `+personSQL(`u`)+`, r.body, r.event, r.created_at
 		 FROM ticket_replies r JOIN users u ON u.id = r.author_id
 		 WHERE r.ticket_id = ? ORDER BY r.id`, ticketID)
 	if err != nil {

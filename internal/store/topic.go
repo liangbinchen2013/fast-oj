@@ -73,7 +73,7 @@ type TopicFilter struct {
 	Limit     int
 }
 
-const topicColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, u.display_name,
+var topicColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, ` + personSQL(`u`) + `,
 		IFNULL(t.problem_id, 0), IFNULL(p.pid, ''), IFNULL(p.title, ''), t.created_at`
 
 const topicFrom = ` FROM topics t
@@ -266,7 +266,7 @@ func (db *DB) DeleteTopicAny(ctx context.Context, id int64) (bool, error) {
 
 // --- comments ---
 
-const topicCommentColumns = `c.id, c.topic_id, c.author_id, u.handle, u.display_name, c.body, c.created_at`
+var topicCommentColumns = `c.id, c.topic_id, c.author_id, u.handle, ` + personSQL(`u`) + `, c.body, c.created_at`
 
 func scanTopicComment(row scanner) (TopicComment, error) {
 	var c TopicComment

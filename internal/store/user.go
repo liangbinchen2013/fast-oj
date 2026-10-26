@@ -21,7 +21,7 @@ const BootstrapHandle = "admin"
 // a column that was only ever meant to gate new registrations.
 const userColumns = `id, handle, IFNULL(email, ''), display_name, bio, role, status, dm_policy,
 		(passhash <> '') AS has_password, IFNULL(email_verified, 1), created_at, IFNULL(last_login_at, 0),
-		IFNULL(theme, '')`
+		IFNULL(theme, ''), IFNULL(tags, '')`
 
 func scanUser(row scanner) (User, error) {
 	var (
@@ -30,7 +30,7 @@ func scanUser(row scanner) (User, error) {
 		verifiedMS int
 	)
 	err := row.Scan(&u.ID, &u.Handle, &u.Email, &u.DisplayName, &u.Bio, &u.Role, &u.Status,
-		&u.DMPolicy, &hasPass, &verifiedMS, &u.CreatedAt, &u.LastLoginAt, &u.Theme)
+		&u.DMPolicy, &hasPass, &verifiedMS, &u.CreatedAt, &u.LastLoginAt, &u.Theme, &u.Tags)
 	u.HasPassword = hasPass != 0
 	u.EmailVerified = verifiedMS != 0
 	return u, notFound(err)
@@ -91,9 +91,16 @@ func (db *DB) ListUsers(ctx context.Context, limit int) ([]User, error) {
 // personSQL names a joined user row the way every history view should print it. The
 // table alias is a parameter because the same rule has to hold in submissions, the
 // leaderboard and follow lists, and each of those joins users under a different name.
+//
+// 管理员贴的标签也在这里接上：`admin [作弊者]`。这一条表达式是所有列名字视图的唯一出口，
+// 接在这里意味着加标签不多一次查询、不改一处模板；注销的那一支在前面先返回，所以被抹掉身份的人
+// 不会带着生前那些标签继续显示。逗号在 SQL 里就地换成 `] [`，两个标签就成了 `[a] [b]`。
 func personSQL(alias string) string {
+	base := `CASE WHEN ` + alias + `.display_name='' THEN ` + alias + `.handle ELSE ` + alias + `.display_name END`
+	tags := `CASE WHEN IFNULL(` + alias + `.tags, '')='' THEN '' ELSE ' [' ||
+		replace(IFNULL(` + alias + `.tags, ''), ',', '] [') || ']' END`
 	return `CASE WHEN ` + alias + `.status='deleted' THEN '` + AnonymousName + `' ELSE ` +
-		`CASE WHEN ` + alias + `.display_name='' THEN ` + alias + `.handle ELSE ` + alias + `.display_name END END`
+		`(` + base + ` || ` + tags + `) END`
 }
 
 // AnonymousName is what every surviving record shows once an account is cancelled.
@@ -128,7 +135,7 @@ func (db *DB) CancelAccount(ctx context.Context, userID int64) (string, error) {
 	err := db.InTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx,
 			`UPDATE users SET handle=?, email=NULL, passhash='', display_name=?, bio='',
-			                        status='deleted', dm_policy='off', last_login_at=NULL, theme=''
+			                        status='deleted', dm_policy='off', last_login_at=NULL, theme='', tags=''
 			 WHERE id=?`, handle, AnonymousName, userID); err != nil {
 			return err
 		}
