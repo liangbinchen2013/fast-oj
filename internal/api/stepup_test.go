@@ -224,7 +224,7 @@ func TestStepUpDoesNotApplyToBearerToken(t *testing.T) {
 	h := newHarness(t)
 	h.author("pleb05")
 	code, body := h.postBearer("/admin/perms/u/pleb05",
-		url.Values{"key": {permProblemCreate}, "action": {"grant"}}, h.admin)
+		url.Values{"key": {permProblemCreate}, "action": {"grant"}}, h.adminToken())
 	if code != http.StatusOK || !strings.Contains(body, "pleb05 → problem.create") {
 		t.Fatalf("令牌那一路被这道门挡了 = %d:\n%s", code, short(body))
 	}
@@ -244,7 +244,7 @@ func TestStepUpNeverEchoesThePassword(t *testing.T) {
 	}
 	// 先拿一条确实会进审计的动作垫底（令牌那一路不受这道门管），不然这个断言是空转的。
 	if _, page := h.postBearer("/admin/perms/u/pleb06",
-		url.Values{"key": {permTopicPost}, "action": {"grant"}}, h.admin); !strings.Contains(page, "pleb06 → topic.post") {
+		url.Values{"key": {permTopicPost}, "action": {"grant"}}, h.adminToken()); !strings.Contains(page, "pleb06 → topic.post") {
 		t.Fatalf("垫底的审计动作没成：\n%s", short(page))
 	}
 	rows, err := h.db.ListAudit(ctx(), store.AuditFilter{Limit: 200})

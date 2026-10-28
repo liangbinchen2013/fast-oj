@@ -51,17 +51,26 @@ var (
 // secret, and real sessions make it redundant.
 func (s *Server) authenticate(r *http.Request) (actor, error) {
 	if token := bearerToken(r); token != "" {
-		if subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.AdminToken)) == 1 {
+		if s.cfg.JudgeToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.JudgeToken)) == 1 {
+			// A judge box is a machine, not a person: no capabilities, and the
+			// judge endpoints are its only surface.
+			return actor{Judge: true}, nil
+		}
+		// 运维令牌是一次性的：这里**只核对不核销**（用掉发生在响应写完之后，见
+		// admintoken.go 的 settleAdminToken）。判机先比，是因为判机令牌是长期共享的串，
+		// 不该被运维那一路的轮换牵连。
+		//
+		// 先问闸门：同一地址 15 分钟内试错够 claimAttempts 次之后，连真的那一枚也先拒——
+		// 令牌可能只有 192 位，但运维自己写的那个未必。
+		if s.adminTokenOverBudget(r) {
+			return actor{}, errForbidden
+		}
+		if s.adminTokenValid(r.Context(), token) {
 			u, err := s.db.EnsureUser(r.Context(), store.BootstrapHandle, "admin")
 			if err != nil {
 				return actor{}, err
 			}
 			return s.withPerms(r, u, true, false)
-		}
-		if s.cfg.JudgeToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(s.cfg.JudgeToken)) == 1 {
-			// A judge box is a machine, not a person: no capabilities, and the
-			// judge endpoints are its only surface.
-			return actor{Judge: true}, nil
 		}
 	}
 

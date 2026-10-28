@@ -173,7 +173,7 @@ func TestCSRFGatesCookieWritesOnly(t *testing.T) {
 
 	// The operator token authenticates without a cookie, so it needs no CSRF token
 	// either: there is no browser session for a cross-site request to ride.
-	if code, body := h.postBearer("/problems", problemValues("P9100", "运维建的题"), h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/problems", problemValues("P9100", "运维建的题"), h.adminToken()); code != http.StatusOK {
 		t.Fatalf("operator post without csrf = %d %s", code, body)
 	}
 }

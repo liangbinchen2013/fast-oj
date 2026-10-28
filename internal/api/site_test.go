@@ -17,7 +17,7 @@ func TestSiteSettingsConsoleNeedsTheRight(t *testing.T) {
 	if code, _ := h.htmlWithCookie(http.MethodGet, "/admin/site", cookie); code != http.StatusForbidden {
 		t.Fatalf("plain user reached site settings: %d", code)
 	}
-	if code, _ := h.htmlGet("/admin/site", h.admin); code != http.StatusOK {
+	if code, _ := h.htmlGet("/admin/site", h.adminToken()); code != http.StatusOK {
 		t.Fatalf("admin could not reach site settings: %d", code)
 	}
 
@@ -45,7 +45,7 @@ func TestSiteSettingsRoundTripAndCache(t *testing.T) {
 		"title": {"我的 OJ"}, "tagline": {"# 欢迎\n\n公式 $E=mc^2$ 也支持。"},
 		"links":  {"洛谷 | https://luogu.com.cn\nCSDN | https://blog.csdn.net"},
 		"footer": {"出题请走管理台"}, "allow_register": {"1"},
-	}, h.admin)
+	}, h.adminToken())
 	if code != http.StatusOK || !strings.Contains(out, "已保存") {
 		t.Fatalf("save = %d %s", code, out)
 	}
@@ -83,7 +83,7 @@ func TestSiteAPIHintIsEditable(t *testing.T) {
 	code, out := h.postBearer("/admin/site", url.Values{
 		"title": {"我的 OJ"}, "allow_register": {"1"},
 		"api_hint": {"健康检查：`curl -s localhost:18080/healthz`"},
-	}, h.admin)
+	}, h.adminToken())
 	if code != http.StatusOK || !strings.Contains(out, "已保存") {
 		t.Fatalf("save = %d %s", code, out)
 	}
@@ -92,7 +92,7 @@ func TestSiteAPIHintIsEditable(t *testing.T) {
 	}
 
 	// Clearing it drops the whole line, not just its text.
-	if _, out := h.postBearer("/admin/site", url.Values{"title": {"我的 OJ"}, "allow_register": {"1"}}, h.admin); !strings.Contains(out, "已保存") {
+	if _, out := h.postBearer("/admin/site", url.Values{"title": {"我的 OJ"}, "allow_register": {"1"}}, h.adminToken()); !strings.Contains(out, "已保存") {
 		t.Fatal("second save failed")
 	}
 	if _, home := h.htmlGet("/", ""); strings.Contains(home, "健康检查") {
@@ -111,7 +111,7 @@ func TestSiteSettingsRejectsBadInput(t *testing.T) {
 		"too many":     {"title": {"ok"}, "links": {strings.Repeat("a | https://a.b\n", 21)}},
 	}
 	for name, values := range cases {
-		code, body := h.postBearer("/admin/site", values, h.admin)
+		code, body := h.postBearer("/admin/site", values, h.adminToken())
 		if code != http.StatusBadRequest {
 			t.Errorf("%s: accepted with %d", name, code)
 		}
@@ -130,14 +130,14 @@ func TestSiteSettingsCountsLimitsInCharacters(t *testing.T) {
 	h := newHarness(t)
 
 	long := strings.Repeat("极速判题题库", 21)
-	if code, body := h.postBearer("/admin/site", url.Values{"title": {long}, "links": {""}}, h.admin); code != http.StatusBadRequest {
+	if code, body := h.postBearer("/admin/site", url.Values{"title": {long}, "links": {""}}, h.adminToken()); code != http.StatusBadRequest {
 		t.Fatalf("oversized title = %d %s", code, body)
 	}
 
 	// 60 Chinese characters are 180 bytes; the form's maxlength counts characters,
 	// so a byte limit would refuse input the browser allowed.
 	ok := strings.Repeat("题", 60)
-	if code, body := h.postBearer("/admin/site", url.Values{"title": {ok}, "links": {""}}, h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/admin/site", url.Values{"title": {ok}, "links": {""}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("60-character title = %d %s", code, body)
 	}
 	site, err := h.db.Site(ctx())
@@ -157,7 +157,7 @@ func TestRegistrationSwitchInSettings(t *testing.T) {
 
 	// The console path is what invalidates the cache, so use it like an operator.
 	if code, _ := h.postBearer("/admin/site", url.Values{
-		"title": {"fast oj"}, "links": {""}}, h.admin); code != http.StatusOK {
+		"title": {"fast oj"}, "links": {""}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("save without the checkbox = %d", code)
 	}
 	site, err := h.db.Site(ctx())

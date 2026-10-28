@@ -61,6 +61,10 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// 运维令牌是"一次只能用一回"的引导凭据：开机先把当前那一枚备好（全新库才认启动
+	// 参数那一个，否则沿用没用过的或现场生成一枚并打印一次）。
+	app.ArmAdminToken(ctx)
+
 	// 积分那一套自己走：按管理员在 /admin/points 设的间隔重算所有人的分值与颜色。
 	// 挂在同一个 ctx 上，收到信号就和 HTTP 一起停。
 	go app.RunPoints(ctx)

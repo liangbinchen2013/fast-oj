@@ -1,7 +1,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"net/http"
 	"net/url"
 	"time"
@@ -52,21 +51,23 @@ func (s *Server) handleAdminClaim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Constant time, like the bearer path: this form is the only place the token
-	// crosses a network boundary as data rather than as a header.
-	if subtle.ConstantTimeCompare([]byte(r.FormValue("token")), []byte(s.cfg.AdminToken)) != 1 {
+	// 先把密码这一关问清楚：口令写短了不该把唯一的一次性令牌烧掉，那会让人只能再去
+	// 翻日志抄下一枚。
+	password := r.FormValue("password")
+	if bad := passwordProblem(password); bad != "" {
+		s.claimFailed(w, r, bad, http.StatusBadRequest)
+		return
+	}
+
+	// 令牌是一次性的：对答案用掉它，服务端同时生成下一枚（新值只在日志里出现一次）。
+	// 这一页自己那把 15 分钟的闸门照旧计数，因为它管的是"这个地址在这一页上试了几回"。
+	if !s.spendOperatorToken(r, r.FormValue("token")) {
 		if _, ferr := s.db.RegisterLoginFailure(r.Context(), key, claimWindow); ferr != nil {
 			s.log.Error("throttle", "err", ferr)
 		}
 		s.log.Warn("claim refused", "ip", clientIP(r))
 		// The typed token is never echoed back into the page.
-		s.claimFailed(w, r, "管理令牌不正确", http.StatusForbidden)
-		return
-	}
-
-	password := r.FormValue("password")
-	if bad := passwordProblem(password); bad != "" {
-		s.claimFailed(w, r, bad, http.StatusBadRequest)
+		s.claimFailed(w, r, "管理令牌不正确，或这一枚已经用过了", http.StatusForbidden)
 		return
 	}
 

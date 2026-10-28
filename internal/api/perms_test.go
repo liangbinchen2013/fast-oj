@@ -118,7 +118,7 @@ func TestPublishRightIsSeparateFromAuthoring(t *testing.T) {
 	if code, body := h.postAs(writer, "/problems/P6002", form("待隐藏", "0")); code != http.StatusOK {
 		t.Fatalf("publish right update = %d %q", code, body)
 	}
-	if _, page := h.htmlGet("/problems/P6002", h.admin); !strings.Contains(page, "未公开") {
+	if _, page := h.htmlGet("/problems/P6002", h.adminToken()); !strings.Contains(page, "未公开") {
 		t.Fatalf("problem should be hidden now:\n%s", page)
 	}
 	// An edit that leaves visibility alone needs no publishing right at all.
@@ -247,11 +247,11 @@ func TestAdminConsolePermissions(t *testing.T) {
 	}
 
 	// The bootstrap admin token has it, and can hand it out.
-	if code, page := h.get("/admin/perms", h.admin); code != http.StatusOK || !strings.Contains(page, "plain") {
+	if code, page := h.get("/admin/perms", h.adminToken()); code != http.StatusOK || !strings.Contains(page, "plain") {
 		t.Fatalf("admin console = %d", code)
 	}
 	if code, body := h.postBearer("/admin/perms/u/plain",
-		url.Values{"key": {permProblemCreate}, "action": {"grant"}}, h.admin); code != http.StatusOK {
+		url.Values{"key": {permProblemCreate}, "action": {"grant"}}, h.adminToken()); code != http.StatusOK {
 		// A bearer-authenticated POST needs no CSRF, and the console answers with
 		// a redirect that the client follows back to the page.
 		t.Fatalf("grant via console = %d %s", code, body)
@@ -264,7 +264,7 @@ func TestAdminConsolePermissions(t *testing.T) {
 
 	// Clearing restores the tier default, which for a plain user is nothing.
 	if code, body := h.postBearer("/admin/perms/u/plain",
-		url.Values{"key": {permProblemCreate}, "action": {"clear"}}, h.admin); code != http.StatusOK {
+		url.Values{"key": {permProblemCreate}, "action": {"clear"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("clear = %d %s", code, body)
 	}
 	if perms, _ := h.db.EffectivePermissions(ctx(), u.ID, u.Role); perms[permProblemCreate] {
@@ -283,7 +283,7 @@ func TestAdminConsoleRefusesSelfEditAndBlocksLockout(t *testing.T) {
 	h := newHarness(t)
 	// The bootstrap admin token maps to the "admin" account, so editing that
 	// account through the console is the self-edit case.
-	code, body := h.json(http.MethodPost, "/admin/perms/u/admin", h.admin,
+	code, body := h.json(http.MethodPost, "/admin/perms/u/admin", h.adminToken(),
 		[]byte(`{"key":"problem.create","action":"revoke"}`))
 	if code != http.StatusBadRequest || !strings.Contains(body, "自己") {
 		t.Fatalf("self-edit = %d %q", code, body)
@@ -295,7 +295,7 @@ func TestRoleAndStatusChanges(t *testing.T) {
 	cookie, _ := h.login("victim", "victim@example.com", testPassword)
 
 	// A promoted user gains the whole staff set through the tier.
-	if code, body := h.postBearer("/admin/users/victim/role", url.Values{"role": {"admin"}}, h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/admin/users/victim/role", url.Values{"role": {"admin"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("role change = %d %s", code, body)
 	}
 	if u := h.user("victim"); u.Role != "admin" {
@@ -306,7 +306,7 @@ func TestRoleAndStatusChanges(t *testing.T) {
 	}
 
 	// Banning kills live sessions immediately.
-	if code, body := h.postBearer("/admin/users/victim/status", url.Values{"status": {"banned"}}, h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/admin/users/victim/status", url.Values{"status": {"banned"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("ban = %d %s", code, body)
 	}
 	if _, page := h.htmlWithCookie(http.MethodGet, "/admin/perms", cookie); strings.Contains(page, "victim") {
@@ -322,7 +322,7 @@ func TestRoleAndStatusChanges(t *testing.T) {
 	}
 
 	// Unbanning restores access without a password reset.
-	if code, body := h.postBearer("/admin/users/victim/status", url.Values{"status": {"active"}}, h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/admin/users/victim/status", url.Values{"status": {"active"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("unban = %d %s", code, body)
 	}
 	code, _, hdr := h.postNoRedirect("/login", url.Values{"identifier": {"victim"}, "password": {testPassword}}, "")
@@ -352,7 +352,7 @@ func TestPermissionStoreRoundTrip(t *testing.T) {
 	ctx := ctx()
 	// Both accounts have to exist first: the admin row is created lazily by the
 	// first request that authenticates with the bootstrap token.
-	h.htmlGet("/problems", h.admin)
+	h.htmlGet("/problems", h.adminToken())
 	h.login("plain", "plain@example.com", testPassword)
 
 	perms, err := h.db.ListPermissions(ctx)
@@ -444,7 +444,7 @@ func TestStrayRegistrationCannotSeatOwnerOnAPopulatedSite(t *testing.T) {
 		t.Fatalf("库里已经有人了，注册还是补上了站主：%d", id)
 	}
 	if code, _, _ := h.postNoRedirect("/admin/claim",
-		url.Values{"token": {h.admin}, "password": {testPassword}}, ""); code != http.StatusSeeOther {
+		url.Values{"token": {h.adminToken()}, "password": {testPassword}}, ""); code != http.StatusSeeOther {
 		t.Fatalf("接管 = %d", code)
 	}
 	if id, _ := h.db.OwnerID(ctx()); id != h.user(claimHandle).ID {

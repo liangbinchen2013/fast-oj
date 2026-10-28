@@ -73,9 +73,9 @@ func (c *Config) Validate() error {
 	if c.Addr == "" {
 		return fmt.Errorf("addr must not be empty")
 	}
-	if c.AdminToken == "" {
-		return fmt.Errorf("admin token must not be empty (set -admin-token or FASTOJ_ADMIN_TOKEN)")
-	}
+	// AdminToken 允许留空，而且留空才是更安全的默认：服务端会自己生成一枚一次性令牌，
+	// 只在日志里打印一次。写死在 env 里的那一串永久有效，而 env 文件、数据库备份、
+	// /proc 都是它的暴露面——见 internal/store/admintoken.go。
 	if c.JudgeToken == "" {
 		return fmt.Errorf("judge token must not be empty (set -judge-token or FASTOJ_JUDGE_TOKEN)")
 	}
@@ -118,7 +118,8 @@ func Load(args []string) (Config, error) {
 	fs.StringVar(&c.Addr, "addr", envOr("FASTOJ_ADDR", "127.0.0.1:8080"), "listen address")
 	fs.StringVar(&c.DataDir, "data", envOr("FASTOJ_DATA", defaultDataDir()), "data directory")
 	fs.StringVar(&c.DBPath, "db", os.Getenv("FASTOJ_DB"), "sqlite file (default <data>/fast-oj.db)")
-	fs.StringVar(&c.AdminToken, "admin-token", os.Getenv("FASTOJ_ADMIN_TOKEN"), "token granting problem authoring")
+	fs.StringVar(&c.AdminToken, "admin-token", os.Getenv("FASTOJ_ADMIN_TOKEN"),
+		"一次性运维令牌（留空则由服务端生成并打印一次；用一次即作废）")
 	fs.StringVar(&c.JudgeToken, "judge-token", os.Getenv("FASTOJ_JUDGE_TOKEN"), "token granting judge access")
 	fs.Int64Var(&c.MaxSource, "max-source", 256<<10, "maximum accepted source/json body bytes")
 	fs.Int64Var(&c.MaxUpload, "max-upload", 64<<20, "maximum case archive upload bytes")

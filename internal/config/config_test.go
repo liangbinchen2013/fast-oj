@@ -33,3 +33,18 @@ func TestLoadRejectsZeroMaxSource(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+// 运维令牌留空是合法的：服务端会自己生成一枚一次性的（见 internal/store/admintoken.go）。
+// 判机令牌必须给——那是一台远端机器要预先知道的共享串，现场生成等于没人能连上来。
+func TestAdminTokenMayBeEmpty(t *testing.T) {
+	cfg, err := Load([]string{"-data", t.TempDir(), "-judge-token", "j"})
+	if err != nil {
+		t.Fatalf("没给运维令牌就该由服务端生成：%v", err)
+	}
+	if cfg.AdminToken != "" {
+		t.Errorf("AdminToken = %q", cfg.AdminToken)
+	}
+	if _, err := Load([]string{"-data", t.TempDir(), "-admin-token", "a"}); err == nil {
+		t.Fatal("判机令牌缺失也该拒绝启动")
+	}
+}

@@ -33,7 +33,7 @@ func (h *harness) uploadCases(pid string) {
 		"1.in": "1 2\n", "1.out": "3\n",
 		"2.in": "4 5\n", "2.out": "9\n",
 	})
-	if code, body := h.do(http.MethodPost, "/problems/"+pid+"/cases/upload", h.admin, archive, "application/zip"); code != http.StatusOK {
+	if code, body := h.do(http.MethodPost, "/problems/"+pid+"/cases/upload", h.adminToken(), archive, "application/zip"); code != http.StatusOK {
 		h.t.Fatalf("upload cases = %d %q", code, body)
 	}
 }

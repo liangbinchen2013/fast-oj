@@ -39,7 +39,7 @@ func TestJudgesPageWarnsWhenNobodyHasAJail(t *testing.T) {
 		claimBody("box-nojail", protocol.Capabilities)); code != http.StatusNotFound {
 		t.Fatalf("空队列领单 = %d：\n%s", code, short(body))
 	}
-	_, page := h.get("/judges", h.admin)
+	_, page := h.get("/judges", h.adminToken())
 	if !strings.Contains(page, "没有一台会把提交关进牢房") {
 		t.Errorf("没有一台有牢房却没警告：\n%s", short(page))
 	}
@@ -58,7 +58,7 @@ func TestJudgesPageWarnsWhenNobodyHasAJail(t *testing.T) {
 	if code, body := h.json(http.MethodPost, "/judge/claim", h.judge, raw); code != http.StatusNotFound {
 		t.Fatalf("领单 = %d：\n%s", code, short(body))
 	}
-	_, page = h.get("/judges", h.admin)
+	_, page = h.get("/judges", h.adminToken())
 	if strings.Contains(page, "没有一台会把提交关进牢房") {
 		t.Errorf("有一台有牢房却还在警告：\n%s", short(page))
 	}
@@ -110,7 +110,7 @@ func TestOldJudgeNotHandedWorkItCannotHonour(t *testing.T) {
 		t.Errorf("工单没把判题器带给会 SPJ 的判机：%+v", task.Checker)
 	}
 
-	_, page := h.get("/judges", h.admin)
+	_, page := h.get("/judges", h.adminToken())
 	if !strings.Contains(page, "未自报") {
 		t.Errorf("/judges 没把这台没自报能力的判机标出来：\n%s", short(page))
 	}
@@ -140,7 +140,7 @@ func TestJudgeClaimWorkOrder(t *testing.T) {
 		t.Fatalf("signed-in user claimed queue work = %d, want 403", code)
 	}
 	// The admin token may drive the queue by hand.
-	if code, _ := h.json(http.MethodPost, "/judge/claim", h.admin, []byte(`{"name":""}`)); code != http.StatusBadRequest {
+	if code, _ := h.json(http.MethodPost, "/judge/claim", h.adminToken(), []byte(`{"name":""}`)); code != http.StatusBadRequest {
 		t.Fatalf("blank judge name = %d, want 400", code)
 	}
 
@@ -195,7 +195,7 @@ func TestJudgeClaimWorkOrder(t *testing.T) {
 	}
 
 	// The box shows up in the registry.
-	code, listed := h.get("/judges", h.admin)
+	code, listed := h.get("/judges", h.adminToken())
 	if code != http.StatusOK || !strings.Contains(listed, "box-1") || !strings.Contains(listed, "cpp") {
 		t.Fatalf("judges = %d %q", code, listed)
 	}

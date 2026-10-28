@@ -48,7 +48,6 @@ type harness struct {
 	srv   *httptest.Server
 	db    *store.DB
 	cfg   config.Config
-	admin string
 	judge string
 	// app + handler are the same chain the listening server uses, kept so a test can
 	// drive a request with a chosen source address. Over the real listener every peer
@@ -86,11 +85,40 @@ func newHarnessCfg(t *testing.T, mutate func(*config.Config)) *harness {
 	app := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), db)
 	handler := app.Handler()
 	hs := httptest.NewServer(handler)
+	// 运维令牌一次只用得了一次，而 httptest 的客户端默认会**跟着 303 再发一次请求**，
+	// 并把同一个 Authorization 带过去——那一跳就是"第二次请求"，真实世界里运维要拿的是
+	// 日志里刚生成的下一枚。所以每一跳都换成当下那一枚：测的还是产品行为，只是把
+	// "同一串重复出示"这件事交给客户端做（真重用的用例在 admintoken_test.go 里显式发两遍）。
+	hs.Client().CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if req.Header.Get("Authorization") == "" {
+			return nil
+		}
+		token, err := db.MintAdminToken(context.Background())
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		return nil
+	}
 	t.Cleanup(func() {
 		hs.Close()
 		db.Close()
 	})
-	return &harness{t: t, srv: hs, db: db, cfg: cfg, admin: cfg.AdminToken, judge: cfg.JudgeToken, app: app, handler: handler}
+	return &harness{t: t, srv: hs, db: db, cfg: cfg, judge: cfg.JudgeToken, app: app, handler: handler}
+}
+
+// adminToken 现取一枚一次性运维令牌。
+//
+// 运维令牌用一次即作废（见 store/admintoken.go），所以测试里不能再像以前那样把一个串
+// 存进 harness 反复用：每一次 bearer 调用都是一次独立的特权动作，得先让服务端生成
+// 当下这一枚。故意用错的用例传的是字面量，不走这里。
+func (h *harness) adminToken() string {
+	h.t.Helper()
+	token, err := h.db.MintAdminToken(ctx())
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return token
 }
 
 // do issues a request and returns status plus body as text.

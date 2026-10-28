@@ -1,9 +1,13 @@
 {{define "content"}}
 <h1>接管后台</h1>
-<p class="meta">这是给全新安装用的第一步：用启动参数 <code>-admin-token</code> 的值，给账号 <b>{{.Data.Handle}}</b>
+<p class="meta">这是给全新安装用的第一步：把运维令牌填进来，给账号 <b>{{.Data.Handle}}</b>
   设一个网页登录密码。设完直接登进来，之后招人照常用 <a href="/admin/perms">权限控制台</a>。</p>
+<p class="meta">令牌<b>用一次就作废</b>：对答案之后服务端会当场另生成一枚，新值只打印在服务器日志的
+  <code>one-time token rotated</code> 那一行里。这样一串被泄露的令牌最多只值一次动作，而不会让人
+  无限次地把这个站的密码改掉。</p>
 {{if .Data.HasOwned}}
-<p class="flash">这个账号已经有密码了，提交会覆盖它，并让它当前的登录状态全部失效。</p>
+<p class="flash">这个账号已经有密码了，提交会覆盖它，并让它当前的登录状态全部失效。
+  要覆盖就得再拿出一枚还没用过的令牌。</p>
 {{end}}
 
 <form method="post" action="/admin/claim">

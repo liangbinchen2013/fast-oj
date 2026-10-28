@@ -35,7 +35,7 @@ func smtpForm(password string) url.Values {
 func TestSMTPSettingsSaveAndMaskThePassword(t *testing.T) {
 	h := newHarness(t)
 
-	if code, body := h.postBearer("/admin/site", smtpForm(mailPassword), h.admin); code != http.StatusOK ||
+	if code, body := h.postBearer("/admin/site", smtpForm(mailPassword), h.adminToken()); code != http.StatusOK ||
 		!strings.Contains(body, "已保存") {
 		t.Fatalf("save = %d\n%s", code, short(body))
 	}
@@ -52,7 +52,7 @@ func TestSMTPSettingsSaveAndMaskThePassword(t *testing.T) {
 		t.Fatalf("stored password = %q", site.SMTP.Password)
 	}
 
-	_, page := h.htmlGet("/admin/site", h.admin)
+	_, page := h.htmlGet("/admin/site", h.adminToken())
 	if strings.Contains(page, mailPassword) {
 		t.Errorf("设置页把 SMTP 密码打出来了：\n%s", short(page))
 	}
@@ -66,7 +66,7 @@ func TestSMTPSettingsSaveAndMaskThePassword(t *testing.T) {
 	// 空着密码框再保存一次：沿用库里那条。这是"改个首页语就把密码洗掉"的反面。
 	keep := smtpForm("")
 	keep.Set("title", "换个标题")
-	if code, body := h.postBearer("/admin/site", keep, h.admin); code != http.StatusOK ||
+	if code, body := h.postBearer("/admin/site", keep, h.adminToken()); code != http.StatusOK ||
 		!strings.Contains(body, "已保存") {
 		t.Fatalf("第二次保存 = %d\n%s", code, short(body))
 	}
@@ -83,7 +83,7 @@ func TestSMTPSettingsSaveAndMaskThePassword(t *testing.T) {
 
 	// 输入新值才替换。
 	replace := smtpForm("brand-new-secret")
-	if code, body := h.postBearer("/admin/site", replace, h.admin); code != http.StatusOK ||
+	if code, body := h.postBearer("/admin/site", replace, h.adminToken()); code != http.StatusOK ||
 		!strings.Contains(body, "已保存") {
 		t.Fatalf("第三次保存 = %d\n%s", code, short(body))
 	}
@@ -94,13 +94,13 @@ func TestSMTPSettingsSaveAndMaskThePassword(t *testing.T) {
 	// 端口写错、加密方式写错都在这里被挡回来，而不是留到发送那一刻挂一分钟。
 	bad := smtpForm("x")
 	bad.Set("smtp_port", "70000")
-	if code, body := h.postBearer("/admin/site", bad, h.admin); code != http.StatusBadRequest ||
+	if code, body := h.postBearer("/admin/site", bad, h.adminToken()); code != http.StatusBadRequest ||
 		!strings.Contains(body, "SMTP 端口要填 1..65535") {
 		t.Fatalf("坏端口 = %d\n%s", code, short(body))
 	}
 	wrongTLS := smtpForm("x")
 	wrongTLS.Set("smtp_tls", "tls1.3")
-	if code, body := h.postBearer("/admin/site", wrongTLS, h.admin); code != http.StatusBadRequest ||
+	if code, body := h.postBearer("/admin/site", wrongTLS, h.adminToken()); code != http.StatusBadRequest ||
 		!strings.Contains(body, "加密方式只认 starttls / ssl / none") {
 		t.Fatalf("坏加密方式 = %d\n%s", code, short(body))
 	}
@@ -116,7 +116,7 @@ func TestVerificationSwitchNeedsAMailer(t *testing.T) {
 	// 没有发信配置就勾"注册需要验证邮箱"：直接拒绝。这个组合的结果是新注册的人收不到信、
 	// 又被闸门拦住，而这正是这一页要避免的事。
 	v := siteForm("allow_register", "require_email_verification")
-	if code, body := h.postBearer("/admin/site", v, h.admin); code != http.StatusBadRequest ||
+	if code, body := h.postBearer("/admin/site", v, h.adminToken()); code != http.StatusBadRequest ||
 		!strings.Contains(body, "要验证邮箱得先填 SMTP 服务器地址和发件地址") {
 		t.Fatalf("没配发信就开验证 = %d\n%s", code, short(body))
 	}

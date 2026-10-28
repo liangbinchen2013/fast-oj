@@ -183,6 +183,12 @@ var auditLabels = map[string]string{
 	// 身份再确认被拒：有人拿着一个能改权限的会话，却连着五次答不出这个账号的密码。
 	// 这是这一站最该留下的"篡改未遂"记录。
 	"step_up.denied": "权限确认失败",
+	// 运维令牌那一串东西能改掉 admin 的密码、能以运维身份建题读用例，所以它每一次被用掉、
+	// 每一次不对、以及"同一地址试得太多"都要单独成行：事后回答"有没有人拿令牌动过这个站"
+	// 只有这三条线索。
+	"admin.token.use":         "用掉运维令牌",
+	"admin.token.denied":      "运维令牌不正确",
+	"admin.token.throttled":   "运维令牌尝试过多",
 }
 
 // auditActions is the filter list, ordered the way an operator reads the page: the
@@ -196,6 +202,7 @@ var auditActions = []string{
 	"contest.delete", "contest.problem.remove",
 	"ticket.status", "ticket.delete", "judge.denied",
 	"judge.claim", "judge.result", "step_up.denied",
+	"admin.token.use", "admin.token.denied", "admin.token.throttled",
 }
 
 func auditLabel(action string) string {

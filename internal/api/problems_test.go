@@ -118,7 +118,7 @@ func TestProblemCRUDThroughTheWebForm(t *testing.T) {
 		{"long title", url.Values{"pid": {"P2"}, "title": {strings.Repeat("标", 201)}, "time_ms": {"1000"}, "mem_mb": {"256"}}},
 	}
 	for _, c := range bad {
-		code, body := h.postBearer("/problems", c.values, h.admin)
+		code, body := h.postBearer("/problems", c.values, h.adminToken())
 		if code != http.StatusBadRequest {
 			t.Errorf("%s: accepted with %d", c.name, code)
 		}
@@ -137,7 +137,7 @@ func TestProblemCRUDThroughTheWebForm(t *testing.T) {
 	if code, _ := h.htmlGet("/problems/P1001", ""); code != http.StatusNotFound {
 		t.Fatalf("get after delete = %d", code)
 	}
-	if code, _ := h.postBearer("/problems/P1001/delete", url.Values{}, h.admin); code != http.StatusNotFound {
+	if code, _ := h.postBearer("/problems/P1001/delete", url.Values{}, h.adminToken()); code != http.StatusNotFound {
 		t.Fatalf("double delete = %d", code)
 	}
 }
@@ -175,11 +175,11 @@ func TestHiddenProblemVisibility(t *testing.T) {
 	if _, listed := h.htmlGet("/problems", ""); strings.Contains(listed, "H1") {
 		t.Fatalf("anon list leaked hidden:\n%s", listed)
 	}
-	if code, body := h.htmlGet("/problems", h.admin); code != http.StatusOK || !strings.Contains(body, "H1") {
+	if code, body := h.htmlGet("/problems", h.adminToken()); code != http.StatusOK || !strings.Contains(body, "H1") {
 		t.Fatalf("admin list = %d %q", code, body)
 	}
 	// The 未公开 marker is what tells an author their problem is not in the list.
-	if code, body := h.htmlGet("/problems/H1", h.admin); code != http.StatusOK || !strings.Contains(body, "未公开") {
+	if code, body := h.htmlGet("/problems/H1", h.adminToken()); code != http.StatusOK || !strings.Contains(body, "未公开") {
 		t.Fatalf("hidden detail = %d", code)
 	}
 }
@@ -202,20 +202,20 @@ func TestCaseUploadAndAccess(t *testing.T) {
 		t.Fatalf("anon upload = %d", code)
 	}
 	// A garbage body is refused in the author's own language and nothing is added.
-	code, body := h.do(http.MethodPost, "/problems/P1/cases/upload", h.admin, []byte("not a zip"), "application/zip")
+	code, body := h.do(http.MethodPost, "/problems/P1/cases/upload", h.adminToken(), []byte("not a zip"), "application/zip")
 	if code != http.StatusOK || !strings.Contains(body, "zip") {
 		t.Fatalf("garbage upload = %d %q", code, body)
 	}
 	if n, _ := h.db.CountTestcases(ctx(), 1, false); n != 0 {
 		t.Fatalf("a bad archive added %d cases", n)
 	}
-	if code, body := h.do(http.MethodPost, "/problems/P1/cases/upload", h.admin, archive, "application/zip"); code != http.StatusOK {
+	if code, body := h.do(http.MethodPost, "/problems/P1/cases/upload", h.adminToken(), archive, "application/zip"); code != http.StatusOK {
 		t.Fatalf("upload = %d %q", code, body)
 	}
 
 	// Re-uploading the same names replaces them instead of duplicating, and the
 	// samples-first ordinal layout stays stable across the second pass.
-	if code, body := h.do(http.MethodPost, "/problems/P1/cases/upload", h.admin, archive, "application/zip"); code != http.StatusOK {
+	if code, body := h.do(http.MethodPost, "/problems/P1/cases/upload", h.adminToken(), archive, "application/zip"); code != http.StatusOK {
 		t.Fatalf("re-upload = %d %q", code, body)
 	}
 	cases, err := h.db.ListTestcases(ctx(), 1, false)
@@ -252,15 +252,15 @@ func TestCaseUploadAndAccess(t *testing.T) {
 		t.Fatalf("anon judged case = %d", code)
 	}
 	// Case "1" sorts to ordinal 3 behind the two samples.
-	if code, body := h.get("/problems/P1/cases/1/out", h.admin); code != http.StatusOK || body != "7\n" {
+	if code, body := h.get("/problems/P1/cases/1/out", h.adminToken()); code != http.StatusOK || body != "7\n" {
 		t.Fatalf("admin judged case = %d %q", code, body)
 	}
-	if code, _ := h.get("/problems/P1/cases/nope/in", h.admin); code != http.StatusNotFound {
+	if code, _ := h.get("/problems/P1/cases/nope/in", h.adminToken()); code != http.StatusNotFound {
 		t.Fatalf("unknown case = %d", code)
 	}
 
 	// Clearing the set removes the rows along with the files.
-	if code, body := h.postBearer("/problems/P1/cases/wipe", url.Values{}, h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/problems/P1/cases/wipe", url.Values{}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("wipe = %d %q", code, body)
 	}
 	if rest, err := h.db.ListTestcases(ctx(), 1, false); err != nil || len(rest) != 0 {
@@ -280,7 +280,7 @@ func TestIncompleteCasePairsRejected(t *testing.T) {
 	f.Write([]byte("only input\n"))
 	w.Close()
 
-	code, body := h.do(http.MethodPost, "/problems/P9/cases/upload", h.admin, buf.Bytes(), "application/zip")
+	code, body := h.do(http.MethodPost, "/problems/P9/cases/upload", h.adminToken(), buf.Bytes(), "application/zip")
 	if code != http.StatusOK || !strings.Contains(body, "lonely") {
 		t.Fatalf("unpaired upload = %d %q", code, body)
 	}

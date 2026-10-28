@@ -82,7 +82,7 @@ func (h *harness) createProblem(values url.Values) (int, string) {
 	if values.Get("visible") == "" {
 		values.Set("visible", "1")
 	}
-	return h.postBearer("/problems", values, h.admin)
+	return h.postBearer("/problems", values, h.adminToken())
 }
 
 // submitCode posts the code form on the problem page, the only way to submit now.
@@ -347,7 +347,7 @@ func TestProblemListViewForBrowsers(t *testing.T) {
 	if strings.Contains(body, "P4001") {
 		t.Error("hidden problem leaked into the anonymous list")
 	}
-	if _, mine := h.htmlGet("/", h.admin); !strings.Contains(mine, "P4001") {
+	if _, mine := h.htmlGet("/", h.adminToken()); !strings.Contains(mine, "P4001") {
 		t.Error("admin browser list lost the hidden problem")
 	}
 }
@@ -416,7 +416,7 @@ $$ \frac{a+b}{2} $$
 		t.Errorf("nav lost the bound handle: %s", page)
 	}
 	// The page it lands on is the same one a browser gets, form and all.
-	if _, page := h.htmlGet("/problems/P4002", h.admin); !strings.Contains(page, "<textarea") {
+	if _, page := h.htmlGet("/problems/P4002", h.adminToken()); !strings.Contains(page, "<textarea") {
 		t.Error("the problem page lost its editor for someone who may edit it")
 	}
 }

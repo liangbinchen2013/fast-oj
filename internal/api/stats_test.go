@@ -36,7 +36,7 @@ func TestStatsPageNeedsTheRight(t *testing.T) {
 		t.Errorf("只有 site.settings 的人进了统计页 = %d", code)
 	}
 	// 管理员令牌那条身份照样能看。
-	if code, _ := h.htmlGet("/admin/stats", h.admin); code != http.StatusOK {
+	if code, _ := h.htmlGet("/admin/stats", h.adminToken()); code != http.StatusOK {
 		t.Errorf("管理员看统计 = %d", code)
 	}
 }

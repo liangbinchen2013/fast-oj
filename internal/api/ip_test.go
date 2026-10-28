@@ -42,7 +42,13 @@ func (h *harness) from(method, path, remoteAddr, token string, values ...url.Val
 		if loc := rec.Header().Get("Location"); loc != "" {
 			u, err := url.Parse(loc)
 			if err == nil {
-				return h.from(http.MethodGet, u.Path+"?"+u.RawQuery, remoteAddr, token)
+				// 跟这一跳是"第二次请求"：运维令牌一次只用得了一次，所以带过去的必须是
+				// 当下那一枚，而不是刚刚用掉的那一串（真实世界里运维从日志里抄下一枚）。
+				next := token
+				if token != "" {
+					next = h.adminToken()
+				}
+				return h.from(http.MethodGet, u.Path+"?"+u.RawQuery, remoteAddr, next)
 			}
 		}
 	}
@@ -60,10 +66,10 @@ func TestIPBanBlocksWholeSite(t *testing.T) {
 	h := newHarness(t)
 	h.openSite("203.0.113.7")
 
-	if code, _ := h.from(http.MethodGet, "/problems", "203.0.113.7:51234", h.admin); code != http.StatusOK {
+	if code, _ := h.from(http.MethodGet, "/problems", "203.0.113.7:51234", h.adminToken()); code != http.StatusOK {
 		t.Fatalf("封禁前该能读题库 = %d", code)
 	}
-	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin,
+	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(),
 		url.Values{"ip": {"203.0.113.7"}, "note": {"脚本刷注册"}}); !strings.Contains(body, "已封禁") {
 		t.Fatalf("封禁没给出结果：\n%s", short(body))
 	}
@@ -87,7 +93,7 @@ func TestIPBanBlocksWholeSite(t *testing.T) {
 	}
 
 	// 解封立刻生效（缓存要跟着失效）。
-	if _, body := h.from(http.MethodPost, "/admin/ips/unban/203.0.113.7", "127.0.0.1:1", h.admin, url.Values{}); !strings.Contains(body, "已解封") {
+	if _, body := h.from(http.MethodPost, "/admin/ips/unban/203.0.113.7", "127.0.0.1:1", h.adminToken(), url.Values{}); !strings.Contains(body, "已解封") {
 		t.Fatalf("解封没给出结果：\n%s", short(body))
 	}
 	if code, _ := h.from(http.MethodGet, "/problems", "203.0.113.7:1", ""); code != http.StatusOK {
@@ -99,7 +105,7 @@ func TestIPBanAcceptsCIDRAndRejectsNonsense(t *testing.T) {
 	h := newHarness(t)
 	h.openSite("198.51.100.1")
 
-	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin,
+	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(),
 		url.Values{"ip": {"198.51.100.0/30"}, "note": {"机房一角"}}); !strings.Contains(body, "已封禁 198.51.100.0/30") {
 		t.Fatalf("网段封禁：\n%s", short(body))
 	}
@@ -115,21 +121,21 @@ func TestIPBanAcceptsCIDRAndRejectsNonsense(t *testing.T) {
 
 	// 写法不对要给出可读原因，不要静悄悄。
 	for _, bad := range []string{"example.com", "198.51.100.999", "", "not an ip"} {
-		_, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin, url.Values{"ip": {bad}})
+		_, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(), url.Values{"ip": {bad}})
 		if !strings.Contains(body, "IP") {
 			t.Errorf("封 %q 没给出写法原因：\n%s", bad, short(body))
 		}
 	}
 	// 环回地址不能封：那等于把整站连自己一起锁死。
-	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin, url.Values{"ip": {"127.0.0.1"}}); !strings.Contains(body, "环回") {
+	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(), url.Values{"ip": {"127.0.0.1"}}); !strings.Contains(body, "环回") {
 		t.Errorf("封 127.0.0.1 没被拦住：\n%s", short(body))
 	}
-	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin, url.Values{"ip": {"::1"}}); !strings.Contains(body, "环回") {
+	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(), url.Values{"ip": {"::1"}}); !strings.Contains(body, "环回") {
 		t.Errorf("封 ::1 没被拦住：\n%s", short(body))
 	}
 	// 封全世界那条也一样拦死：按下去的人连同这一页一起被 403，之后就没人解封得了。
 	for _, selfLockout := range []string{"0.0.0.0/0", "::/0"} {
-		if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin, url.Values{"ip": {selfLockout}}); !strings.Contains(body, "全世界") {
+		if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(), url.Values{"ip": {selfLockout}}); !strings.Contains(body, "全世界") {
 			t.Errorf("封 %s 没被拦住：\n%s", selfLockout, short(body))
 		}
 	}
@@ -190,7 +196,7 @@ func TestTrafficCountsPerAddress(t *testing.T) {
 		h.from(http.MethodGet, "/problems", "203.0.113.30:1", "")
 	}
 	h.from(http.MethodGet, "/rank", "203.0.113.31:1", "")
-	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin, url.Values{"ip": {"203.0.113.99"}}); !strings.Contains(body, "已封禁") {
+	if _, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(), url.Values{"ip": {"203.0.113.99"}}); !strings.Contains(body, "已封禁") {
 		t.Fatalf("封禁失败：\n%s", short(body))
 	}
 	for i := 0; i < 2; i++ {

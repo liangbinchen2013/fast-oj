@@ -302,7 +302,7 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		"  POST /admin/site/test-email   按表单里刚填的值发一封测试邮件，失败原因原样显示在这一页",
 		"  GET  /admin/points            积分与颜色：四个维度的单位分与上限、衰减、重算间隔、档位门槛（site.settings）",
 		"  POST /admin/points            保存参数 / 只重算 / 保存并立即重算，页面下面是分值从高到低的预览",
-		"  GET  /admin/claim             首次接管：用管理令牌给 admin 账号设网页密码",
+		"  GET  /admin/claim             首次接管：用运维令牌给 admin 账号设网页密码（令牌用一次即作废，下一枚打印在日志）",
 		"  GET  /admin/perms             权限控制台（permission.manage）",
 		"  GET  /admin/stats             站点统计：人数、提交、人均、判定分布、GET/POST 请求量（stats.view）",
 		"  GET  /admin/ips               IP 封禁名单与按地址流量 Top20（ip.manage）",
@@ -379,6 +379,9 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 			if status == 0 {
 				status = http.StatusOK
 			}
+			// 运维令牌在这里结算：一次请求可能问好几遍"这是谁"，而那一串只值一次动作，
+			// 所以核对是只读的，用掉与生成下一枚统一安排在响应写完之后（见 admintoken.go）。
+			s.settleAdminToken(r, status)
 			if s.cfg.Verbose || status >= 400 || dur > 50*time.Millisecond {
 				s.log.Info("req",
 					"method", r.Method,

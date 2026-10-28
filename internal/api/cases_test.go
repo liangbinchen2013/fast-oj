@@ -139,7 +139,7 @@ func TestCaseEditorRoundTrip(t *testing.T) {
 	if err != nil || tc.Ordinal != 2 || tc.Score != 5 {
 		t.Fatalf("after rename = %+v %v", tc, err)
 	}
-	if code, body := h.get("/problems/P700/cases/renamed2/in", h.admin); code != http.StatusOK || body != "10 20\n" {
+	if code, body := h.get("/problems/P700/cases/renamed2/in", h.adminToken()); code != http.StatusOK || body != "10 20\n" {
 		t.Fatalf("edited input = %d %q", code, body)
 	}
 
@@ -165,7 +165,7 @@ func TestCaseEditorRoundTrip(t *testing.T) {
 	if n, _ := h.db.CountTestcases(ctx(), h.problem("P700").ID, false); n != 1 {
 		t.Fatalf("cases after delete = %d, want 1", n)
 	}
-	if code, _ := h.get("/problems/P700/cases/renamed2/in", h.admin); code == http.StatusOK {
+	if code, _ := h.get("/problems/P700/cases/renamed2/in", h.adminToken()); code == http.StatusOK {
 		t.Fatal("the deleted case file is still readable")
 	}
 }
@@ -200,7 +200,7 @@ func TestCaseEditorRefusesHugeFiles(t *testing.T) {
 	}); !strings.Contains(body, "heavy") {
 		t.Fatalf("metadata-only save:\n%s", short(body))
 	}
-	if code, fetched := h.get("/problems/P701/cases/heavy/in", h.admin); code != http.StatusOK || fetched != big {
+	if code, fetched := h.get("/problems/P701/cases/heavy/in", h.adminToken()); code != http.StatusOK || fetched != big {
 		t.Fatalf("case bytes changed on a metadata save: %d %d bytes", code, len(fetched))
 	}
 }

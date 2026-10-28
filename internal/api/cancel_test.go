@@ -31,14 +31,14 @@ func TestCancelAccountFreesTheNameAndKeepsTheRecords(t *testing.T) {
 	}
 
 	// 没填对用户名不放行：这一步不可逆。
-	if _, body := h.postBearer("/admin/users/reused/cancel", url.Values{"confirm": {"wrong"}}, h.admin); !strings.Contains(body, "把用户名原样填进确认框") {
+	if _, body := h.postBearer("/admin/users/reused/cancel", url.Values{"confirm": {"wrong"}}, h.adminToken()); !strings.Contains(body, "把用户名原样填进确认框") {
 		t.Errorf("确认框没拦住：\n%s", short(body))
 	}
 	if u := h.user("reused"); u.IsCancelled() {
 		t.Fatal("没确认就注销了")
 	}
 
-	if _, body := h.postBearer("/admin/users/reused/cancel", url.Values{"confirm": {"reused"}}, h.admin); !strings.Contains(body, "已注销") {
+	if _, body := h.postBearer("/admin/users/reused/cancel", url.Values{"confirm": {"reused"}}, h.adminToken()); !strings.Contains(body, "已注销") {
 		t.Fatalf("注销没给出结果：\n%s", short(body))
 	}
 	// 注销之后按老用户名已经查不到了（那个名字自由了），只能按 id 读这行墓碑。
@@ -113,7 +113,7 @@ func TestCancelAccountRefusals(t *testing.T) {
 	if code, _ := h.postAs(author, "/problems", problemValues("P8101", "他建的题")); code != http.StatusOK {
 		t.Fatalf("建题 = %d", code)
 	}
-	if _, body := h.postBearer("/admin/users/ownsastu/cancel", url.Values{"confirm": {"ownsastu"}}, h.admin); !strings.Contains(body, "没有作者") {
+	if _, body := h.postBearer("/admin/users/ownsastu/cancel", url.Values{"confirm": {"ownsastu"}}, h.adminToken()); !strings.Contains(body, "没有作者") {
 		t.Errorf("名下有题却没拦住：\n%s", short(body))
 	}
 	if u := h.user("ownsastu"); u.IsCancelled() {
@@ -130,14 +130,14 @@ func TestCancelAccountRefusals(t *testing.T) {
 		t.Fatal("站主被注销了")
 	}
 	if _, body := h.postBearer("/admin/users/"+claimHandle+"/cancel",
-		url.Values{"confirm": {claimHandle}}, h.admin); !strings.Contains(body, "自己") {
+		url.Values{"confirm": {claimHandle}}, h.adminToken()); !strings.Contains(body, "自己") {
 		t.Errorf("站主注销自己没被拦住：\n%s", short(body))
 	}
 
 	// 注销掉的账号登不回来，墓碑页也不给社交按钮。
 	h.author("gone20")
 	victimID := h.user("gone20").ID
-	if _, body := h.postBearer("/admin/users/gone20/cancel", url.Values{"confirm": {"gone20"}}, h.admin); !strings.Contains(body, "已注销") {
+	if _, body := h.postBearer("/admin/users/gone20/cancel", url.Values{"confirm": {"gone20"}}, h.adminToken()); !strings.Contains(body, "已注销") {
 		t.Fatalf("注销失败：\n%s", short(body))
 	}
 	if code, page := h.formPage("/login", url.Values{"identifier": {"banned-" + strconv.FormatInt(victimID, 10)}, "password": {testPassword}}); code == http.StatusSeeOther ||
@@ -148,7 +148,7 @@ func TestCancelAccountRefusals(t *testing.T) {
 		t.Errorf("墓碑页上还有私信入口")
 	}
 	// 权限控制台里的墓碑页不给注销按钮。
-	if _, page := h.htmlGet("/admin/perms/u/banned-"+strconv.FormatInt(victimID, 10), h.admin); strings.Contains(page, "/cancel") {
+	if _, page := h.htmlGet("/admin/perms/u/banned-"+strconv.FormatInt(victimID, 10), h.adminToken()); strings.Contains(page, "/cancel") {
 		t.Errorf("墓碑的权限页上还留着注销表单")
 	}
 }

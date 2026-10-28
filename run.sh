@@ -74,11 +74,13 @@ fi
 echo
 echo "浏览器打开 $SERVER_URL"
 if [ "$GENERATED" = 1 ]; then
-  echo "  管理令牌（本次随机生成）：$FASTOJ_ADMIN_TOKEN"
+  echo "  管理令牌（本次随机生成，用一次即作废）：$FASTOJ_ADMIN_TOKEN"
   echo "  判机令牌（本次随机生成）：$FASTOJ_JUDGE_TOKEN"
-  echo "  想固定下来就 export FASTOJ_ADMIN_TOKEN / FASTOJ_JUDGE_TOKEN 再跑。"
+  echo "  判机令牌想固定下来就 export FASTOJ_JUDGE_TOKEN 再跑。管理令牌不建议固定：它"
+  echo "  「一次即废」这一点就是防泄露的那道闸门；用完下一枚会打印在服务器日志的"
+  echo "  one-time token rotated 那一行里。"
 fi
-echo "  全新库的第一件事：打开 $SERVER_URL/admin/claim，用管理令牌给 admin 账号设网页密码。"
+echo "  全新库的第一件事：打开 $SERVER_URL/admin/claim，用管理令牌给 admin 账号设网页密码（这一枚设完就作废）。"
 echo
 
 ./dist/fast-oj -addr "$ADDR" -data "$DATA" "$@"

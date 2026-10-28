@@ -34,7 +34,7 @@ func (h *harness) openVerifySwitch() {
 	h.t.Helper()
 	v := smtpForm(mailPassword)
 	v.Set("require_email_verification", "1")
-	if code, body := h.postBearer("/admin/site", v, h.admin); code != http.StatusOK ||
+	if code, body := h.postBearer("/admin/site", v, h.adminToken()); code != http.StatusOK ||
 		!strings.Contains(body, "已保存") {
 		h.t.Fatalf("保存发信配置 = %d\n%s", code, short(body))
 	}
@@ -92,7 +92,7 @@ func TestUnverifiedEmailIsRefusedASubmission(t *testing.T) {
 
 	// 开关关掉：同一个未验证的账号立刻能交——闸门认的是开关，不是账号上的历史。
 	off := smtpForm(mailPassword)
-	if code, body := h.postBearer("/admin/site", off, h.admin); code != http.StatusOK ||
+	if code, body := h.postBearer("/admin/site", off, h.adminToken()); code != http.StatusOK ||
 		!strings.Contains(body, "已保存") {
 		t.Fatalf("关掉开关 = %d\n%s", code, short(body))
 	}

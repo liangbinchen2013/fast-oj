@@ -35,7 +35,7 @@ func TestAuditPermissionGrant(t *testing.T) {
 	h.author("auditee")
 
 	if code, body := h.postBearer("/admin/perms/u/auditee",
-		url.Values{"key": {permStatsView}, "action": {"grant"}}, h.admin); code != http.StatusOK {
+		url.Values{"key": {permStatsView}, "action": {"grant"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("授予 = %d %s", code, short(body))
 	}
 	rows := h.auditRows("perm.grant")
@@ -56,7 +56,7 @@ func TestAuditPermissionGrant(t *testing.T) {
 
 	// 撤销与清除同样是特权动作。
 	if code, _ := h.postBearer("/admin/perms/u/auditee",
-		url.Values{"key": {permStatsView}, "action": {"revoke"}}, h.admin); code != http.StatusOK {
+		url.Values{"key": {permStatsView}, "action": {"revoke"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("撤销 = %d", code)
 	}
 	if rows := h.auditRows("perm.revoke"); len(rows) != 1 || rows[0].Detail != permStatsView {
@@ -64,7 +64,7 @@ func TestAuditPermissionGrant(t *testing.T) {
 	}
 	// 没做成的动作不算：不认识的能力键被拒之后不该多出一行。
 	if code, _ := h.postBearer("/admin/perms/u/auditee",
-		url.Values{"key": {"no.such.key"}, "action": {"grant"}}, h.admin); code == http.StatusOK {
+		url.Values{"key": {"no.such.key"}, "action": {"grant"}}, h.adminToken()); code == http.StatusOK {
 		t.Fatalf("不存在的权限键居然成功了：%d", code)
 	}
 	if rows := h.auditRows("perm.grant"); len(rows) != 1 {
@@ -76,10 +76,10 @@ func TestAuditPermissionGrant(t *testing.T) {
 func TestAuditPrivilegedSites(t *testing.T) {
 	h := newHarness(t)
 	h.author("victim")
-	if code, _ := h.postBearer("/admin/users/victim/status", url.Values{"status": {"banned"}}, h.admin); code != http.StatusOK {
+	if code, _ := h.postBearer("/admin/users/victim/status", url.Values{"status": {"banned"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("封号 = %d", code)
 	}
-	if code, _ := h.postBearer("/admin/users/victim/role", url.Values{"role": {"admin"}}, h.admin); code != http.StatusOK {
+	if code, _ := h.postBearer("/admin/users/victim/role", url.Values{"role": {"admin"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("改角色 = %d", code)
 	}
 	rows := h.auditRows("user.status")
@@ -92,7 +92,7 @@ func TestAuditPrivilegedSites(t *testing.T) {
 
 	// 封 IP：原因是有文本的，也要在审计里。
 	h.openSite("203.0.113.60")
-	if code, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.admin,
+	if code, body := h.from(http.MethodPost, "/admin/ips/ban", "127.0.0.1:1", h.adminToken(),
 		url.Values{"ip": {"203.0.113.60"}, "note": {"脚本刷注册"}}); code != http.StatusOK || !strings.Contains(body, "已封禁") {
 		t.Fatalf("封 IP = %d", code)
 	}
@@ -100,7 +100,7 @@ func TestAuditPrivilegedSites(t *testing.T) {
 		!strings.Contains(got[0].Detail, "脚本刷注册") {
 		t.Errorf("ip.ban = %+v", got)
 	}
-	if code, _ := h.from(http.MethodPost, "/admin/ips/unban/203.0.113.60", "127.0.0.1:1", h.admin, url.Values{}); code != http.StatusOK {
+	if code, _ := h.from(http.MethodPost, "/admin/ips/unban/203.0.113.60", "127.0.0.1:1", h.adminToken(), url.Values{}); code != http.StatusOK {
 		t.Fatalf("解封 = %d", code)
 	}
 	if got := h.auditRows("ip.unban"); len(got) != 1 || got[0].Target != "203.0.113.60" {
@@ -111,7 +111,7 @@ func TestAuditPrivilegedSites(t *testing.T) {
 	if code, _ := h.postBearer("/admin/site", url.Values{
 		"title": {"测试站"}, "tagline": {"首页语"}, "footer": {""}, "api_hint": {""},
 		"links": {""}, "allow_register": {"1"}, "allow_topics": {"1"},
-	}, h.admin); code != http.StatusOK {
+	}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("保存站点设置 = %d", code)
 	}
 	saved := h.auditRows("site.save")
@@ -224,7 +224,7 @@ func TestAuditFailureDoesNotBlockAction(t *testing.T) {
 		t.Fatal(err)
 	}
 	if code, body := h.postBearer("/admin/perms/u/auditee2",
-		url.Values{"key": {permStatsView}, "action": {"grant"}}, h.admin); code != http.StatusOK {
+		url.Values{"key": {permStatsView}, "action": {"grant"}}, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("审计写不进去时动作被挡了：%d %s", code, short(body))
 	}
 	u := h.user("auditee2")
@@ -258,7 +258,7 @@ func TestAuditPageGateAndPaging(t *testing.T) {
 	// 两次授予，好让分页有东西可分。
 	for _, key := range []string{permStatsView, permJudgeView} {
 		if code, _ := h.postBearer("/admin/perms/u/plainreader",
-			url.Values{"key": {key}, "action": {"grant"}}, h.admin); code != http.StatusOK {
+			url.Values{"key": {key}, "action": {"grant"}}, h.adminToken()); code != http.StatusOK {
 			t.Fatalf("授予 %s = %d", key, code)
 		}
 	}

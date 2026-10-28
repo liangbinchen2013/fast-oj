@@ -124,6 +124,23 @@ func (db *DB) SpendAdminToken(ctx context.Context, presented, purpose string) (s
 	return next, true, nil
 }
 
+// AdminTokenMatches 只回答"这是不是当前那一枚可用的运维令牌"，不改动任何状态。
+//
+// 分开写是因为一次 HTTP 请求里"这是谁"可能被问好几遍（CSRF 闸门、限流、处理器各一次），
+// 而一次性令牌只值一次动作：核对与核销必须分开，否则第二遍核对会把一个正常请求变成
+// "令牌无效"。核销在响应写完之后做一次（见 internal/api/admintoken.go）。
+func (db *DB) AdminTokenMatches(ctx context.Context, presented string) (bool, error) {
+	if strings.TrimSpace(presented) == "" {
+		return false, nil
+	}
+	var n int
+	if err := db.SQL.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM admin_tokens WHERE hash=? AND used_at=0`, adminTokenHash(presented)).Scan(&n); err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // AdminTokenArmed 报告库里现在有没有一枚可用的令牌（正常部署里恒为真；这一条给启动
 // 和测试用来确认状态，不该被拿去做判断依据）。
 func (db *DB) AdminTokenArmed(ctx context.Context) (bool, error) {

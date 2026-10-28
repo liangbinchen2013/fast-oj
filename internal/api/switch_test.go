@@ -50,7 +50,7 @@ func TestSiteFeatureSwitches(t *testing.T) {
 
 	// 只留注册开着，其余四个开关全部关掉。
 	values := siteForm("allow_register")
-	if code, body := h.postBearer("/admin/site", values, h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/admin/site", values, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("保存站点设置 = %d\n%s", code, short(body))
 	}
 
@@ -104,7 +104,7 @@ func TestSiteFeatureSwitches(t *testing.T) {
 
 	// 全部打开之后，同一个人又能写了。
 	values = siteForm(allSwitches...)
-	if code, body := h.postBearer("/admin/site", values, h.admin); code != http.StatusOK {
+	if code, body := h.postBearer("/admin/site", values, h.adminToken()); code != http.StatusOK {
 		t.Fatalf("恢复全部开关 = %d\n%s", code, short(body))
 	}
 	if code, body := h.postAs(kid, "/feed", url.Values{"body": {"重新打开之后又能发了"}}); code != http.StatusOK {
@@ -118,7 +118,7 @@ func TestSiteFeatureSwitches(t *testing.T) {
 // 站点设置页要能把四个新开关显示成该有的样子：关掉的框不带 checked。
 func TestSiteAdminPageShowsSwitches(t *testing.T) {
 	h := newHarness(t)
-	if code, page := h.get("/admin/site", h.admin); code != http.StatusOK {
+	if code, page := h.get("/admin/site", h.adminToken()); code != http.StatusOK {
 		t.Fatalf("站点设置页 = %d", code)
 	} else {
 		for _, name := range []string{"allow_register", "allow_feed", "allow_topics", "allow_contests", "allow_dm"} {
@@ -127,11 +127,11 @@ func TestSiteAdminPageShowsSwitches(t *testing.T) {
 			}
 		}
 	}
-	if _, page := h.postBearer("/admin/site", siteForm("allow_register"), h.admin); !strings.Contains(page, "站点设置") {
+	if _, page := h.postBearer("/admin/site", siteForm("allow_register"), h.adminToken()); !strings.Contains(page, "站点设置") {
 		t.Error("保存之后没有回到设置页")
 	}
 	// 关掉的三个框不再 checked，开着的两个还是 checked。
-	_, page := h.get("/admin/site", h.admin)
+	_, page := h.get("/admin/site", h.adminToken())
 	for name, want := range map[string]bool{
 		"allow_feed": false, "allow_topics": false, "allow_contests": false, "allow_dm": false, "allow_register": true,
 	} {

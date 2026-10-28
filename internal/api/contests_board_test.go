@@ -99,13 +99,13 @@ func TestContestStandingsIOIMode(t *testing.T) {
 	if _, body := h.createProblem(url.Values{"pid": {"P7000"}, "title": {"十分题"}}); !strings.Contains(body, "题目已建好") {
 		t.Fatalf("problem:\n%s", body)
 	}
-	if code, body := h.do(http.MethodPost, "/problems/P7000/cases/upload", h.admin,
+	if code, body := h.do(http.MethodPost, "/problems/P7000/cases/upload", h.adminToken(),
 		zipOf(map[string]string{"1.in": "1\n", "1.out": "1\n"}), "application/zip"); code != http.StatusOK {
 		t.Fatalf("cases = %d %s", code, body)
 	}
 	if _, body := h.postBearer("/problems/P7000/cases/1/edit", url.Values{
 		"name": {"1"}, "score": {"10"}, "group": {""}, "input": {"1\n"}, "output": {"1\n"},
-	}, h.admin); !strings.Contains(body, "已保存用例") {
+	}, h.adminToken()); !strings.Contains(body, "已保存用例") {
 		t.Fatalf("case weight:\n%s", body)
 	}
 	h.readyProblem("P7001") // two judged cases, worth 1 each until the contest rescales it
