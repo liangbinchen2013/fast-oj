@@ -1,5 +1,6 @@
 {{define "content"}}
 <h1>私信</h1>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>对方</th><th>最后一条</th><th class="num">未读</th><th>时间</th></tr>
   {{range .Data.Threads}}
@@ -13,4 +14,5 @@
   <tr><td colspan="4">还没有私信。在别人的主页点「发私信」就能开始对话。</td></tr>
   {{end}}
 </table>
+</div>
 {{end}}

@@ -3,6 +3,7 @@
 <p class="meta">按去重后的 AC 题目数排名，同数则提交少者在前。名字的颜色是活跃度档位（蓝→绿→橙→红），
   紫和棕由管理员指定；积分是它的读数，口径由管理员在 /admin/points 调。</p>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th class="num">名次</th><th>用户</th><th class="num">解题</th><th class="num">提交</th><th class="num">积分</th><th>最近 AC</th></tr>
   {{range .Data.Rows}}
@@ -18,4 +19,5 @@
   <tr><td colspan="6">还没有人 AC 过题目。</td></tr>
   {{end}}
 </table>
+</div>
 {{end}}

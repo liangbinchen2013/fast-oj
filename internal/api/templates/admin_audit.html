@@ -22,6 +22,7 @@
   <input type="submit" value="筛选">
 </form>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>时间</th><th>操作者</th><th>动作</th><th>对象</th><th>详情</th><th>来源 IP</th></tr>
   {{range .Data.Rows}}
@@ -40,6 +41,7 @@
   <tr><td colspan="6">还没有记录：这段时间没人动过别人的权限、账号、题目与站点设置。</td></tr>
   {{end}}
 </table>
+</div>
 
 <p class="meta">
   共 {{.Data.Total}} 条，本页 {{.Data.Shown}} 条

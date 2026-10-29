@@ -318,6 +318,67 @@ func readAll(t *testing.T, resp *http.Response) string {
 
 const testPassword = "correct-horse-battery"
 
+func TestHomeProblemSearch(t *testing.T) {
+	h := newHarness(t)
+	h.readyProblem("PUI001")
+	code, body := h.htmlGet("/", "")
+	if code != http.StatusOK {
+		t.Fatalf("GET / = %d", code)
+	}
+	for _, want := range []string{
+		`<form class="home-search" method="get" action="/problems">`,
+		`<label for="home-query">查找题目</label>`,
+		`id="home-query" type="search" name="q"`,
+		`href="/problems/PUI001"`,
+		`暂无等待中的提交`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("home page missing %q", want)
+		}
+	}
+}
+
+func TestSharedNavigationAndResponsiveTables(t *testing.T) {
+	h := newHarness(t)
+	h.readyProblem("PUI001")
+	for _, tc := range []struct{ path, section, page string }{
+		{"/", "", "home"},
+		{"/problems", "problems", "problems"},
+		{"/problems/PUI001", "problems", "problem"},
+		{"/contests", "contests", "contests"},
+		{"/topics", "topics", "topics"},
+		{"/feed", "feed", "feed"},
+		{"/rank", "rank", "rank"},
+		{"/submissions", "submissions", "submissions"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			code, body := h.htmlGet(tc.path, "")
+			if code != http.StatusOK {
+				t.Fatalf("GET %s = %d", tc.path, code)
+			}
+			for _, want := range []string{
+				`data-page="` + tc.page + `"`,
+				`href="#main-content"`,
+				`id="main-content" tabindex="-1"`,
+				`href="/` + tc.section + `" aria-current="page"`,
+			} {
+				if !strings.Contains(body, want) {
+					t.Errorf("missing %q", want)
+				}
+			}
+			if strings.Count(body, `aria-current="page"`) != 1 {
+				t.Error("navigation must have exactly one active destination")
+			}
+			if strings.Count(body, "<table") != strings.Count(body, `class="table-scroll"`) {
+				t.Error("every data table must have a scroll region")
+			}
+			if strings.Contains(body, `href="/admin/perms"`) || strings.Contains(body, `href="/settings"`) {
+				t.Error("anonymous navigation leaked account controls")
+			}
+		})
+	}
+}
+
 func TestProblemListViewForBrowsers(t *testing.T) {
 	h := newHarness(t)
 	h.readyProblem("P4000")

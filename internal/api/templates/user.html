@@ -40,14 +40,17 @@
 
 {{if .Data.Tally}}
 <h2>判定分布</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr>{{range .Data.Tally}}<th class="num">{{.Name}}</th>{{end}}</tr>
   <tr>{{range .Data.Tally}}<td class="num"><span class="badge {{.Class}}">{{.Count}}</span></td>{{end}}</tr>
 </table>
+</div>
 {{end}}
 
 {{if .Data.SolvedList}}
 <h2>已解出题</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>编号</th><th>标题</th><th class="num">最好用时</th><th>AC 于</th></tr>
   {{range .Data.SolvedList}}
@@ -59,10 +62,12 @@
   </tr>
   {{end}}
 </table>
+</div>
 {{end}}
 
 {{if .Data.Recent}}
 <h2>最近提交</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>#</th><th>题目</th><th>语言</th><th>结果</th><th class="num">用时</th><th class="num">内存</th><th class="num">得分</th><th>时间</th></tr>
   {{range .Data.Recent}}
@@ -78,5 +83,6 @@
   </tr>
   {{end}}
 </table>
+</div>
 {{end}}
 {{end}}

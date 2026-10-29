@@ -8,12 +8,13 @@
 
 <form class="row" method="get" action="">
   <div style="flex:1 1 18rem">
-    <label>搜索</label>
-    <input type="text" name="q" placeholder="标题或正文" value="{{.Data.Query}}">
+    <label for="topic-search">搜索帖子</label>
+    <input id="topic-search" type="search" name="q" placeholder="输入标题或正文关键词" value="{{.Data.Query}}">
   </div>
   <input type="submit" value="搜索">
 </form>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>类型</th><th>标题</th><th>作者</th><th class="num">评论</th><th>时间</th>{{if .Me}}<th>操作</th>{{end}}</tr>
   {{range .Data.Rows}}
@@ -42,6 +43,7 @@
   <tr><td colspan="{{if .Me}}6{{else}}5{{end}}">{{.Data.EmptyText}}</td></tr>
   {{end}}
 </table>
+</div>
 
 <p class="meta">
   {{if .Data.Next}}<a href="?limit={{.Data.Limit}}{{with .Data.Query}}&q={{.}}{{end}}&after={{.Data.Next}}">更早的帖子 →</a>{{end}}

@@ -1,32 +1,43 @@
 {{define "content"}}
-<h1>注册</h1>
+<div class="auth-shell">
+  <section class="auth-card">
+    <h1>注册</h1>
+    <p class="meta">创建你的账号。昵称选填，其余信息均为必填。</p>
 
-<form method="post" action="/register">
-  <label>用户名（登录名，之后可用作个人主页地址）</label>
-  <input type="text" name="handle" value="{{.Data.Handle}}" autocomplete="username" required>
+    <form method="post" action="/register">
+      <label for="register-handle">用户名</label>
+      <input type="text" id="register-handle" name="handle" value="{{.Data.Handle}}" autocomplete="username" aria-describedby="register-handle-hint" required>
+      <p class="field-hint" id="register-handle-hint">用于登录，之后可用作个人主页地址。</p>
 
-  {{if .Data.RequireVerify}}
-  <label>邮箱（本站要求验证：注册后会寄一封带链接的信，点过之后才能提交代码和参加比赛）</label>
-  {{else}}
-  <label>邮箱（当前不要求验证，只用来看是谁；找回密码的功能还没做，忘了口令仍要管理员改库）</label>
-  {{end}}
-  <input type="email" name="email" value="{{.Data.Email}}" autocomplete="email" required>
+      <label for="register-email">邮箱</label>
+      <input type="email" id="register-email" name="email" value="{{.Data.Email}}" autocomplete="email" aria-describedby="register-email-hint register-email-recovery" required>
+      {{if .Data.RequireVerify}}
+      <p class="field-hint" id="register-email-hint">本站要求邮箱验证。注册后请点击邮件中的链接，验证后才能提交代码和参加比赛。</p>
+      {{else}}
+      <p class="field-hint" id="register-email-hint">当前无需邮箱验证，邮箱仅用于识别账号。</p>
+      {{end}}
+      <p class="field-hint" id="register-email-recovery">暂不支持自助找回密码，忘记密码需联系管理员重置。</p>
 
-  <label>昵称（可选，显示在题目记录与排行榜上）</label>
-  <input type="text" name="display_name" value="{{.Data.DisplayName}}" maxlength="40">
+      <label for="register-display-name">昵称（可选）</label>
+      <input type="text" id="register-display-name" name="display_name" value="{{.Data.DisplayName}}" maxlength="40" aria-describedby="register-display-name-hint">
+      <p class="field-hint" id="register-display-name-hint">显示在题目记录与排行榜上，最多 40 个字符。</p>
 
-  <label>密码（至少 10 位）</label>
-  <input type="password" name="password" autocomplete="new-password" required>
+      <label for="register-password">密码</label>
+      <input type="password" id="register-password" name="password" autocomplete="new-password" minlength="10" aria-describedby="register-password-hint" required>
+      <p class="field-hint" id="register-password-hint">至少 10 位，请妥善保存。</p>
 
-  <input type="hidden" name="device" id="device" value="">
-  {{template "humanfield" .Data.Human}}
+      <input type="hidden" name="device" id="device" value="">
+      {{template "humanfield" .Data.Human}}
 
-  <p><input type="submit" value="注册并登录"></p>
-</form>
+      <p><input type="submit" value="注册并登录"></p>
+    </form>
+
+    <p class="auth-note">已有账号？<a href="/login">前往登录</a>。</p>
+    <p class="auth-note">注册即表示同意判题结果以本系统记录为准。判题在本机以受限进程运行，详见 README 的隔离边界。</p>
+  </section>
+</div>
 
 {{template "humanverify" .Data.Human}}
-
-<p class="meta">注册即表示同意判题结果以本系统记录为准。判题在本机以受限进程运行，详见 README 的隔离边界。</p>
 
 <script>
   // 浏览器侧的"这台机器"标识：第一次访问生成一个随机号存进 localStorage，之后每次注册都带上它。

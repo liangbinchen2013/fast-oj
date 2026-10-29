@@ -37,6 +37,7 @@
 </form>
 
 <h2>当前封禁</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>地址 / 网段</th><th>原因</th><th>谁封的</th><th>时间</th><th class="num">被拒请求</th><th></th></tr>
   {{range .Data.Banned}}
@@ -58,12 +59,14 @@
   <tr><td colspan="6">还没有封过任何地址。</td></tr>
   {{end}}
 </table>
+</div>
 
 <h2>流量 Top{{len .Data.Traffic}}</h2>
 {{if .Data.Truncated}}
 <p class="meta">注意：来源地址已经超过 5000 个，后面的新地址不再记录（这通常是有人在换地址刷）。
   下面的数字仍然只包含被记下来的那部分。</p>
 {{end}}
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr>
     <th>来源地址</th><th class="num">GET</th><th class="num">POST</th><th class="num">其他</th>
@@ -90,6 +93,7 @@
   <tr><td colspan="7">还没有请求进来过。</td></tr>
   {{end}}
 </table>
+</div>
 
 <p class="meta">注册量与登录失败是分开算的：注册限流看的是 IP 加浏览器设备号两把键，
   这里只是把同一个地址的访问总量摆出来，让你判断该不该动手。</p>

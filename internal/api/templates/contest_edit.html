@@ -55,10 +55,7 @@
       <label>加入码（留空 = 公开赛，任何人免码加入）</label>
       <input type="text" name="join_code" value="{{.Data.JoinCode}}" maxlength="32" autocomplete="off" spellcheck="false" placeholder="只有字母数字和 -">
     </div>
-    <div>
-      <label>&nbsp;</label>
-      <button type="submit" name="newcode" value="1">随机生成</button>
-    </div>
+    <button type="submit" name="newcode" value="1">随机生成</button>
   </div>
   <p class="meta">加入码只有你（和持 <code>contest.manage.any</code> 的人）看得到，列表、榜单与 URL 上都不会出现。</p>
 
@@ -93,6 +90,7 @@
   <br>比赛内分值 = 题目分值 ×（比赛设定分 ÷ 题目满分），所以设定分只是等比缩放，不能凭空加分。
 </p>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>题号</th><th>题目</th><th class="num">分值</th><th>操作</th></tr>
   {{range .Data.Problems}}
@@ -122,6 +120,7 @@
   <tr><td colspan="4">还没挂题。</td></tr>
   {{end}}
 </table>
+</div>
 
 <form method="post" action="/contests/{{.Data.Key}}/problems" class="row">
   <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
