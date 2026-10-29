@@ -4,6 +4,7 @@
 
 {{if .Data.Warning}}<p class="flash bad">{{.Data.Warning}}</p>{{end}}
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th class="num">id</th><th>名称</th><th>能判的语言</th><th>隔离</th><th>自报能力</th><th>最近心跳</th><th>备注</th></tr>
   {{range .Data.Rows}}
@@ -20,6 +21,7 @@
   <tr><td colspan="7">还没有判机连上来，提交会一直排队。</td></tr>
   {{end}}
 </table>
+</div>
 <p class="meta">「隔离」是判机每次心跳重报的<b>此刻</b>状态：有牢房 / 开不起来 / 还没报过。
   它过去只写在启动日志的一行里，没人盯日志就等于没人知道——而没有牢房时，提交是在判机自己的
   身份下、在宿主文件系统上跑的。</p>

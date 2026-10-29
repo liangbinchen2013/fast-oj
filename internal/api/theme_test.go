@@ -15,6 +15,32 @@ import (
 
 var htmlOpenRe = regexp.MustCompile(`<html[^>]*>`)
 
+func TestThemeDefaultsMatchStylesheet(t *testing.T) {
+	css, err := assetFS.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		pattern string
+		index   int
+	}{
+		{`(?s):root \{(.*?)\}`, 0},
+		{`(?s)\[data-theme=dark\] \{(.*?)\}`, 1},
+		{`(?s):root:not\(\[data-theme=light\]\) \{(.*?)\}`, 1},
+	} {
+		block := regexp.MustCompile(tc.pattern).FindSubmatch(css)
+		if len(block) != 2 {
+			t.Fatalf("missing palette %s", tc.pattern)
+		}
+		for key, defaults := range themeDefaults {
+			want := "--" + key + ": " + defaults[tc.index] + ";"
+			if !strings.Contains(string(block[1]), want) {
+				t.Errorf("palette %s does not match setting default %s", tc.pattern, want)
+			}
+		}
+	}
+}
+
 // themeAccount 拿一个能登录的普通账号：夹具里的 signIn 就是"注册并登录"那一路，
 // 配色用例要的是两个不同的人各自登录。
 func (h *harness) themeAccount(handle string) session {

@@ -5,6 +5,7 @@
   <a href="{{.Data.OtherTo}}">{{if eq .Data.Direction "followers"}}关注{{else}}粉丝{{end}}</a>
 </p>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>用户</th><th>昵称</th></tr>
   {{range .Data.People}}
@@ -16,4 +17,5 @@
   <tr><td colspan="2">还没有人。</td></tr>
   {{end}}
 </table>
+</div>
 {{end}}

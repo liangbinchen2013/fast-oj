@@ -21,6 +21,7 @@
 {{end}}
 
 {{if .Data.Rows}}
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr>
     <th class="num">#</th><th>{{if .Data.TeamMode}}队伍{{else}}选手{{end}}</th>
@@ -48,6 +49,7 @@
   </tr>
   {{end}}
 </table>
+</div>
 <p class="meta">
   {{if eq .Data.Mode "ACM"}}
   比解题数，同数再比「首过时刻 + 罚时」；编译错误与判机故障不罚时，判机故障也不算尝试。

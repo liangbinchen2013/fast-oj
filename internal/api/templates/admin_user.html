@@ -35,6 +35,7 @@
 <p class="meta">确认之后，下面的按钮才会出现；没确认时这一页只读。</p>
 {{end}}
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>权限</th><th>含义</th><th>角色自带</th><th>单独设置</th><th>生效</th><th></th></tr>
   {{range .Data.Grants}}
@@ -58,6 +59,7 @@
   </tr>
   {{end}}
 </table>
+</div>
 
 {{if and (not .Data.Self) (not .Data.Owner) .Data.CanUser}}
 <h2>标签</h2>

@@ -54,6 +54,7 @@
 
 {{if .Data.Rows}}
 <h2>{{.Data.Summary}}</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th class="num">#</th><th>用户名</th><th>邮箱</th><th>初始密码</th><th>结果</th></tr>
   {{range .Data.Rows}}
@@ -66,6 +67,7 @@
   </tr>
   {{end}}
 </table>
+</div>
 
 <h3>抄下来发下去</h3>
 <textarea rows="10" spellcheck="false" autocomplete="off" readonly>{{.Data.Copyable}}</textarea>

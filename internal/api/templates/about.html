@@ -2,6 +2,7 @@
 <h1>运行概览</h1>
 <p class="meta">已运行 <b>{{.Data.Uptime}}</b> · {{.Data.Go}} {{.Data.Platform}}</p>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>监听</th><td>{{.Data.Listen}}</td></tr>
   <tr><th>数据目录</th><td><code>{{.Data.Data}}</code></td></tr>
@@ -11,6 +12,7 @@
   <tr><th>用户</th><td>{{.Data.Counts.Users}}</td></tr>
   <tr><th>判机</th><td>{{.Data.Counts.Judges}}</td></tr>
 </table>
+</div>
 
 <h2>页面一览</h2>
 <pre><code>{{range .Data.Routes}}{{.}}

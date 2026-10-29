@@ -99,7 +99,9 @@ type viewer struct {
 // shell is the envelope every page template sees: layout fields plus the page
 // payload under .Data.
 type shell struct {
-	Title string
+	Title   string
+	Page    string
+	Section string
 	// Site carries the operator-editable title, tagline and footer.
 	Site  store.SiteConfig
 	Me    *viewer
@@ -159,6 +161,7 @@ func (v *viewEngine) render(w http.ResponseWriter, status int, page string, data
 	if !ok {
 		return errors.New("unknown page template " + page)
 	}
+	data.Page = page
 	var buf bytes.Buffer
 	if err := t.ExecuteTemplate(&buf, "layout", data); err != nil {
 		return err
@@ -174,7 +177,8 @@ func (v *viewEngine) render(w http.ResponseWriter, status int, page string, data
 func (s *Server) page(w http.ResponseWriter, r *http.Request, status int, title, name string, me *viewer, flash string, data any) {
 	// 导航栏的封禁入口要同时满足"有这个能力"和"这一页现在有意义"，所以每次渲染时填。
 	s.injectIPGate(me, r)
-	err := views.render(w, status, name, shell{Title: title, Site: s.site(r.Context()), Me: me, Flash: flash, Data: data})
+	section, _, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	err := views.render(w, status, name, shell{Title: title, Section: section, Site: s.site(r.Context()), Me: me, Flash: flash, Data: data})
 	if err != nil {
 		s.log.Error("template", "page", name, "err", err)
 		s.respondError(w, r, http.StatusInternalServerError, "page rendering failed")

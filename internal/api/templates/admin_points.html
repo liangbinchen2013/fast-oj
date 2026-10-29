@@ -5,6 +5,7 @@
   其余四档由下面这套参数按间隔自动更新。</p>
 
 <h2>档位</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table class="tiers">
   <tr><th>颜色</th><th>从多少分起</th><th>怎么来</th></tr>
   {{range .Data.Tiers}}
@@ -15,6 +16,7 @@
   </tr>
   {{end}}
 </table>
+</div>
 
 <form method="post" action="/admin/points">
   <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
@@ -97,6 +99,7 @@
 <h2>现在谁多少分</h2>
 <p class="meta">上一次重算：{{.Data.LastAt}}。这张表按分值从高到低排，最多 50 行；
   改完数字点「保存并立即重算」就能立刻看见谁因此变绿、谁掉回蓝。</p>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>名字</th><th class="num">总分</th><th>明细（未衰减）</th><th>颜色来路</th></tr>
   {{range .Data.Rows}}
@@ -115,6 +118,7 @@
   <tr><td colspan="4" class="meta">还没有人。</td></tr>
   {{end}}
 </table>
+</div>
 <p class="meta">默认口径是：题 10/道 上限 300，提交 1/次 上限 60，比赛 20/场 上限 200，发言 2/条 上限 120，
   每闲一天扣 5%，档位 30 / 80 / 160，每 10 分钟重算。</p>
 {{end}}

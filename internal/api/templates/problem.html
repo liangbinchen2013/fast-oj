@@ -49,23 +49,23 @@
   {{if .Data.Contest.ID}}<input type="hidden" name="contest" value="{{.Data.Contest.ID}}">{{end}}
   <div class="row">
     <div>
-      <label>语言</label>
-      <select name="language">
+      <label for="submit-language">语言</label>
+      <select id="submit-language" name="language">
         {{range .Data.Langs}}<option value="{{.}}">{{.}}</option>{{end}}
       </select>
     </div>
     {{range .Data.Versions}}
     <div>
-      <label>{{.Label}}</label>
-      <select name="{{.Name}}">
+      <label for="submit-{{.Name}}">{{.Label}}</label>
+      <select id="submit-{{.Name}}" name="{{.Name}}">
         <option value="">判机默认</option>
         {{range .Options}}<option value="{{.Value}}">{{.Label}}{{if .Default}}（默认）{{end}}</option>{{end}}
       </select>
     </div>
     {{end}}
   </div>
-  <label>源代码</label>
-  <textarea name="source" spellcheck="false" autocomplete="off" required></textarea>
+  <label for="submit-source">源代码</label>
+  <textarea name="source" id="submit-source" spellcheck="false" autocomplete="off" required></textarea>
   <p><input type="submit" value="提交判题"></p>
 </form>
 {{else}}
@@ -74,6 +74,7 @@
 
 {{if .Data.Recent}}
 <h2>最近提交</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>#</th><th>用户</th><th>语言</th><th>结果</th><th class="num">用时</th><th class="num">内存</th><th>时间</th></tr>
   {{range .Data.Recent}}
@@ -88,5 +89,6 @@
   </tr>
   {{end}}
 </table>
+</div>
 {{end}}
 {{end}}

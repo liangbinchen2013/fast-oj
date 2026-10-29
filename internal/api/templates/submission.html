@@ -11,6 +11,7 @@
 
 <h2 class="{{.Data.Class}}">{{.Data.Headline}}</h2>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr>
     <th>用时</th><th>内存</th><th>得分</th>
@@ -25,9 +26,11 @@
     <td>{{.Data.Created}}</td><td>{{.Data.Judged}}</td>
   </tr>
 </table>
+</div>
 
 {{if and .Data.View.Runs .Data.Runs}}
   <h2>逐用例</h2>
+  <div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
   <table>
     <tr>
       <th class="num">#</th><th>类型</th><th>用例</th><th>结果</th><th class="num">得分</th>
@@ -44,6 +47,7 @@
     </tr>
     {{end}}
   </table>
+  </div>
 {{end}}
 
 {{if and .Data.View.Diff .Data.Detail}}

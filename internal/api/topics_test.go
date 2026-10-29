@@ -440,11 +440,11 @@ func TestHomeShowsTheTenNewestTopics(t *testing.T) {
 		}
 	}
 	page := h.getPage(session{}, "/")
-	if !strings.Contains(page, `class="cards"`) {
-		t.Fatalf("the front page lost the card grid:\n%s", page)
+	if !strings.Contains(page, `class="topic-list"`) {
+		t.Fatalf("the front page lost the topic list:\n%s", page)
 	}
-	if strings.Count(page, `class="card" href="/topics/`) != homeTopics {
-		t.Errorf("expected %d cards, got %d:\n%s", homeTopics, strings.Count(page, `class="card" href="/topics/`), page)
+	if strings.Count(page, `class="topic-row" href="/topics/`) != homeTopics {
+		t.Errorf("expected %d topics, got %d:\n%s", homeTopics, strings.Count(page, `class="topic-row" href="/topics/`), page)
 	}
 	// The twelve newest are ordered newest-first, so #12 is in and #02 is out.
 	if !strings.Contains(page, "首页贴 12") || strings.Contains(page, "首页贴 02") {
@@ -452,9 +452,8 @@ func TestHomeShowsTheTenNewestTopics(t *testing.T) {
 	}
 	// Both kinds appear, and a 求助贴 says which problem it is about.
 	if !strings.Contains(page, "求助") || !strings.Contains(page, "社区") || !strings.Contains(page, "P8100") {
-		t.Errorf("the cards lost their kind or problem:\n%s", page)
+		t.Errorf("the topics lost their kind or problem:\n%s", page)
 	}
-	// An anonymous reader gets the same cards and the same "login to post" hint.
 	if !strings.Contains(page, "/topics/new") || !strings.Contains(page, "登录后才能发") {
 		t.Errorf("the anonymous hint is missing:\n%s", page)
 	}
