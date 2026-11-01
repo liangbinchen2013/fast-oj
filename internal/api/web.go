@@ -98,10 +98,13 @@ type subRow struct {
 	Language  string
 	Class     string
 	Outcome   string
-	Time      string
-	Mem       string
-	Score     string
-	Ago       string
+	// Status 是这一行的原始状态。列表上不给普通人看它，但"能不能重判"要照它决定：
+	// 还在排队的那条没有上一次可清，重判它是个空操作，按钮就不该出现在那儿。
+	Status string
+	Time   string
+	Mem    string
+	Score  string
+	Ago    string
 }
 
 func rowOf(d store.SubmissionDetail) subRow {
@@ -114,7 +117,7 @@ func rowOf(d store.SubmissionDetail) subRow {
 		ID: d.ID, Handle: d.Handle, Name: personName(d.Name, d.Handle),
 		NameColor: d.Color, PID: d.PID, Title: d.Title,
 		Language: langCell(d.Language, d.Options, d.Toolchain),
-		Class:    class, Outcome: outcome,
+		Class:    class, Outcome: outcome, Status: d.Status,
 		Time: formatMS(d.TimeMS, d.TimeMin), Mem: formatKB(d.MemKB, d.MemMin), Score: score,
 		Ago: agoMS(d.CreatedAt),
 	}
@@ -391,9 +394,25 @@ type submissionsData struct {
 	Next          int64
 	UserFilter    string
 	ProblemFilter string
+	// StatusFilter 空表示不筛。这一格是给管理员找人的：停在队列里的、判机超时的，混在
+	// 一堆已完成的记录里翻不出来。
+	StatusFilter string
+	StatusOpts   []detailOption
+	// CanRejudge 是"这一页上有没有那条按钮"。行级判断交给模板里那格 Status。
+	CanRejudge bool
 }
 
-func (s *Server) submissionsPage(w http.ResponseWriter, r *http.Request, me *viewer, items []store.SubmissionDetail, limit int, userFilter, problemFilter string) {
+// statusOptions 是状态筛选项。值与表格里显示的那句话同源（statusLabel），免得下拉写的
+// 和表格显示的是两套话；这五个也正是 schema 的 CHECK 认的那五个。
+func statusOptions() []detailOption {
+	out := make([]detailOption, 0, 5)
+	for _, st := range []string{"queued", "compiling", "running", "done", "abandoned"} {
+		out = append(out, detailOption{Value: st, Label: statusLabel(st)})
+	}
+	return out
+}
+
+func (s *Server) submissionsPage(w http.ResponseWriter, r *http.Request, me *viewer, items []store.SubmissionDetail, limit int, userFilter, problemFilter, statusFilter string, canRejudge bool) {
 	rows := make([]subRow, 0, len(items))
 	for _, d := range items {
 		rows = append(rows, rowOf(d))
@@ -405,6 +424,7 @@ func (s *Server) submissionsPage(w http.ResponseWriter, r *http.Request, me *vie
 	s.page(w, r, http.StatusOK, "提交记录", "submissions", me, msgOf(r), submissionsData{
 		Rows: rows, Shown: len(rows), Limit: limit, Next: next,
 		UserFilter: userFilter, ProblemFilter: problemFilter,
+		StatusFilter: statusFilter, StatusOpts: statusOptions(), CanRejudge: canRejudge,
 	})
 }
 
@@ -458,6 +478,9 @@ type submissionData struct {
 	View        detailView
 	Partial     bool
 	Waiting     bool
+	// CanRejudge 是页尾那条「重新判题」按钮。排队中的那条没有上一次可清，所以那儿不摆
+	// 一个按下去只会原地踏步的按钮。
+	CanRejudge bool
 }
 
 func (s *Server) submissionPage(w http.ResponseWriter, r *http.Request, a actor, d store.SubmissionDetail, view detailView, source, detail string, runs []store.Run) {
@@ -501,7 +524,9 @@ func (s *Server) submissionPage(w http.ResponseWriter, r *http.Request, a actor,
 		contestLink = "/contests/" + url.PathEscape(d.ContestCID) + "/standings"
 	}
 
-	s.page(w, r, http.StatusOK, fmt.Sprintf("提交 #%d", d.ID), "submission", a.viewer(), "", submissionData{
+	// 重判之后那一句"已退回队列"要在这页上说到——它是从本页按下去的，绕到列表页去报信
+	// 等于让人再点一次返回。
+	s.page(w, r, http.StatusOK, fmt.Sprintf("提交 #%d", d.ID), "submission", a.viewer(), msgOf(r), submissionData{
 		ID: d.ID, Handle: d.Handle, Name: personName(d.Name, d.Handle), NameColor: d.Color,
 		PID: d.PID, Title: d.Title,
 		Language: d.Language, Version: toolchainCell(d.Language, d.Toolchain, d.Options),
@@ -513,9 +538,10 @@ func (s *Server) submissionPage(w http.ResponseWriter, r *http.Request, a actor,
 		ContestLink: contestLink,
 		ContestGone: contested && d.ContestCID == "",
 		Runs:        rows, Detail: detail, Source: source,
-		View:    view,
-		Partial: !(view.Runs && view.Perf && view.Diff && view.Judge && view.Source),
-		Waiting: judge.Status(d.Status).InFlight(),
+		View:       view,
+		Partial:    !(view.Runs && view.Perf && view.Diff && view.Judge && view.Source),
+		Waiting:    judge.Status(d.Status).InFlight(),
+		CanRejudge: a.can(permRejudge) && d.Status != string(judge.Queued),
 	})
 }
 

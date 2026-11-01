@@ -102,6 +102,8 @@ func (s *Server) Handler() http.Handler {
 
 	mux.HandleFunc("GET /submissions", s.handleSubmitList)
 	mux.HandleFunc("GET /submissions/{id}", s.handleSubmitGet)
+	// 判机口径变了，旧提交不会自己改判——这一条是管理员把那条判定纠正回来的唯一动作。
+	mux.HandleFunc("POST /submissions/{id}/rejudge", s.handleRejudge)
 
 	mux.HandleFunc("GET /contests", s.handleContestList)
 	mux.HandleFunc("GET /contests/new", s.handleContestNew)
@@ -269,8 +271,9 @@ func (s *Server) handleAbout(w http.ResponseWriter, r *http.Request) {
 		"  POST /contests/{key}/teams        建队 / 入队 / 退队",
 		"  GET  /contests/{key}/standings    该比赛独立榜（OI 取最后一次且赛中不出榜，IOI 取最高分，ACM 首过+罚时）",
 		"  GET  /contests/{key}/p/{题号}      比赛内题号入口，带上比赛归属",
-		"  GET  /submissions             提交列表（?user= &problem=）",
+		"  GET  /submissions             提交列表（?user= &problem= &status=）",
 		"  GET  /submissions/{id}        结果；判题中每 2 秒自动刷新，逐用例行一条条冒出来",
+		"  POST /submissions/{id}/rejudge 重新判题（要 submission.rejudge）：退回队列，清掉上一次的判定与逐用例",
 		"  GET  /feed                    动态（?user= &after= &limit=）；POST /feed 发一条",
 		"  GET  /topics                  社区贴列表（?q= &after= &limit=）；/topics/new 发帖",
 		"  GET  /topics/{id}             帖子正文与评论；POST /topics/{id}/delete 删帖（本人或 topic.moderate）",

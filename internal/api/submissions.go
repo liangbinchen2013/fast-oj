@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/liangbinchen2013/fast-oj/internal/judge"
 	"github.com/liangbinchen2013/fast-oj/internal/store"
 )
 
@@ -170,11 +171,72 @@ func (s *Server) handleSubmitList(w http.ResponseWriter, r *http.Request) {
 		}
 		f.ProblemID = p.ID
 	}
+	// 状态筛选是给管理员找人的：停在队列里的、判机超时的，混在一堆已完成的记录里翻不出来。
+	status := q.Get("status")
+	if status != "" && !knownStatus(status) {
+		s.respondError(w, r, http.StatusBadRequest, "status must be one of queued, compiling, running, done, abandoned")
+		return
+	}
+	f.Status = status
 
 	items, err := s.db.ListSubmissionDetails(r.Context(), f)
 	if err != nil {
 		s.writeStoreError(w, r, err)
 		return
 	}
-	s.submissionsPage(w, r, a.viewer(), items, f.Limit, q.Get("user"), q.Get("problem"))
+	s.submissionsPage(w, r, a.viewer(), items, f.Limit, q.Get("user"), q.Get("problem"), status, a.can(permRejudge))
+}
+
+// knownStatus 认 schema 的 CHECK 允许的那五个值。填错了要给一句话，而不是让人对着一张
+// 空表猜自己筛错了什么——这条筛选项就是拿来找"卡住的提交"的，参数静默失效最误事。
+func knownStatus(raw string) bool {
+	switch judge.Status(raw) {
+	case judge.Queued, judge.Compiling, judge.Running, judge.Done, judge.Abandoned:
+		return true
+	}
+	return false
+}
+
+// handleRejudge 把一条提交退回队列重判。
+//
+// 判题口径是会变的（这一条功能的起因就是"数组开太大本来该判 MLE 而不是 RE"），而库里的
+// 判定是**当时那一次运行**的结果，不会因为判机升级就自己改判。重判就是管理员把那条旧判定
+// 纠正回来的唯一动作，所以它改的是"结果是什么"，单独一把 submission.rejudge 钥匙，不跟着
+// submission.view.any 走。
+//
+// 已经在飞的那一次盖不掉新结果：Rejudge 把 judge_id 清成 NULL，旧判机后来回报时先在归属
+// 检查上吃 403，再到状态迁移上被拒（TestRejudgedSubmissionIgnoresTheOldJudge）。
+// 退回的这条按 id 排在队列最前——管理员按下按钮是想要一个答案，不是想要一次排队。
+func (s *Server) handleRejudge(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.requirePerm(w, r, permRejudge)
+	if !ok {
+		return
+	}
+	id, ok := pathID(r)
+	if !ok {
+		s.respondError(w, r, http.StatusBadRequest, "submission id must be a positive number")
+		return
+	}
+	// 先把这一行读出来：不存在要如实 404，而且审计里要留下"改掉的是哪一个状态、哪一个判定"，
+	// 事后才答得出这条成绩被重判过几次、每次改前是什么。
+	d, err := s.db.SubmissionDetail(r.Context(), id)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	back := "/submissions/" + strconv.FormatInt(id, 10)
+	requeued, err := s.db.Rejudge(r.Context(), id)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	if !requeued {
+		// 排队中的那条没有上一次可清：再说一遍"已退回队列"就是谎，所以如实讲它本来就在等。
+		s.redirectMsg(w, r, back, "这条已经在队列里等判了，不需要重判。")
+		return
+	}
+	s.log.Info("submission requeued", "id", id, "was", d.Status+"/"+d.Verdict, "by", a.User.Handle)
+	s.audit(r, a, "submission.rejudge", "submission:"+strconv.FormatInt(id, 10),
+		d.PID+" "+d.Status+"/"+orDash(d.Verdict)+" → 退回队列")
+	s.redirectMsg(w, r, back, "已退回队列，判机重跑之后这一页会跟着更新。")
 }

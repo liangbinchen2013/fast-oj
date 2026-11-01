@@ -153,12 +153,12 @@ func siteSwitches(c store.SiteConfig) string {
 // printing the key: a row nobody named is still a row that happened, and hiding it
 // would be worse than showing something raw.
 var auditLabels = map[string]string{
-	"perm.grant":             "授予能力",
-	"perm.revoke":            "撤销能力",
-	"perm.clear":             "清除单项覆盖",
-	"role.change":            "改角色",
-	"user.status":            "改账号状态",
-	"user.tags":              "改用户标签",
+	"perm.grant":  "授予能力",
+	"perm.revoke": "撤销能力",
+	"perm.clear":  "清除单项覆盖",
+	"role.change": "改角色",
+	"user.status": "改账号状态",
+	"user.tags":   "改用户标签",
 	// 名字颜色：紫=以管理员身份出现在每一处署名，棕=被处罚。这两条要留痕，因为它们改的
 	// 是"别人怎么看待这个人"，而不是"他能做什么"——恰恰是最容易口头否认的那类改动。
 	"user.color":             "改名字颜色",
@@ -175,20 +175,23 @@ var auditLabels = map[string]string{
 	"problem.delete":         "删除题目",
 	"contest.delete":         "删除比赛",
 	"contest.problem.remove": "比赛移下题目",
-	"ticket.status":          "工单改状态",
-	"ticket.delete":          "删除工单",
-	"judge.denied":           "判机鉴权被拒",
-	"judge.claim":            "判机领走工单",
-	"judge.result":           "判机回报判定",
+	// 重判改的是"结果是什么"：清掉上一次判定与逐用例、把人退回队列，得分与榜单跟着动。
+	// 判机口径变了以后管理员会大量按它，事后"谁的这条成绩是哪一次判的"只能从这条流水查。
+	"submission.rejudge": "重新判题",
+	"ticket.status":      "工单改状态",
+	"ticket.delete":      "删除工单",
+	"judge.denied":       "判机鉴权被拒",
+	"judge.claim":        "判机领走工单",
+	"judge.result":       "判机回报判定",
 	// 身份再确认被拒：有人拿着一个能改权限的会话，却连着五次答不出这个账号的密码。
 	// 这是这一站最该留下的"篡改未遂"记录。
 	"step_up.denied": "权限确认失败",
 	// 运维令牌那一串东西能改掉 admin 的密码、能以运维身份建题读用例，所以它每一次被用掉、
 	// 每一次不对、以及"同一地址试得太多"都要单独成行：事后回答"有没有人拿令牌动过这个站"
 	// 只有这三条线索。
-	"admin.token.use":         "用掉运维令牌",
-	"admin.token.denied":      "运维令牌不正确",
-	"admin.token.throttled":   "运维令牌尝试过多",
+	"admin.token.use":       "用掉运维令牌",
+	"admin.token.denied":    "运维令牌不正确",
+	"admin.token.throttled": "运维令牌尝试过多",
 }
 
 // auditActions is the filter list, ordered the way an operator reads the page: the
@@ -200,6 +203,7 @@ var auditActions = []string{
 	"judge_program.save", "judge_program.remove",
 	"case.delete", "cases.wipe", "problem.delete",
 	"contest.delete", "contest.problem.remove",
+	"submission.rejudge",
 	"ticket.status", "ticket.delete", "judge.denied",
 	"judge.claim", "judge.result", "step_up.denied",
 	"admin.token.use", "admin.token.denied", "admin.token.throttled",

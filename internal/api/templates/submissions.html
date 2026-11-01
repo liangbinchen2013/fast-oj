@@ -4,12 +4,18 @@
 <form class="row" method="get" action="/submissions">
   <div><label for="submission-user">用户</label><input id="submission-user" type="text" name="user" placeholder="用户名" value="{{.Data.UserFilter}}"></div>
   <div><label for="submission-problem">题目</label><input id="submission-problem" type="text" name="problem" placeholder="题目编号" value="{{.Data.ProblemFilter}}"></div>
+  <div><label for="submission-status">状态</label>
+    <select id="submission-status" name="status">
+      <option value="">全部</option>
+      {{range .Data.StatusOpts}}<option value="{{.Value}}"{{if eq .Value $.Data.StatusFilter}} selected{{end}}>{{.Label}}</option>{{end}}
+    </select>
+  </div>
   <input type="submit" value="筛选">
 </form>
 
 <div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
-  <tr><th>#</th><th>用户</th><th>题目</th><th>语言</th><th>结果</th><th class="num">用时</th><th class="num">内存</th><th class="num">得分</th><th>时间</th></tr>
+  <tr><th>#</th><th>用户</th><th>题目</th><th>语言</th><th>结果</th><th class="num">用时</th><th class="num">内存</th><th class="num">得分</th><th>时间</th>{{if .Data.CanRejudge}}<th></th>{{end}}</tr>
   {{range .Data.Rows}}
   <tr>
     <td><a href="/submissions/{{.ID}}">{{.ID}}</a></td>
@@ -21,15 +27,22 @@
     <td class="num">{{.Mem}}</td>
     <td class="num">{{.Score}}</td>
     <td>{{.Ago}}</td>
+    {{if $.Data.CanRejudge}}
+    <td>{{if ne .Status "queued"}}<form class="inline" method="post" action="/submissions/{{.ID}}/rejudge"
+        onsubmit="return confirm('重判 #{{.ID}}？上一次的判定与逐用例会被清掉，判机重跑后按今天的口径重写。');">
+      <input type="hidden" name="csrf" value="{{$.Me.CSRF}}">
+      <button type="submit">重判</button>
+    </form>{{end}}</td>
+    {{end}}
   </tr>
   {{else}}
-  <tr><td colspan="9">还没有提交。</td></tr>
+  <tr><td{{if .Data.CanRejudge}} colspan="10"{{else}} colspan="9"{{end}}>还没有提交。</td></tr>
   {{end}}
 </table>
 </div>
 
 <p class="meta">
   显示 {{.Data.Shown}} 条
-  {{if .Data.Next}}· <a href="/submissions?after={{.Data.Next}}&limit={{.Data.Limit}}{{with .Data.UserFilter}}&user={{.}}{{end}}{{with .Data.ProblemFilter}}&problem={{.}}{{end}}">更早 →</a>{{end}}
+  {{if .Data.Next}}· <a href="/submissions?after={{.Data.Next}}&limit={{.Data.Limit}}{{with .Data.UserFilter}}&user={{.}}{{end}}{{with .Data.ProblemFilter}}&problem={{.}}{{end}}{{with .Data.StatusFilter}}&status={{.}}{{end}}">更早 →</a>{{end}}
 </p>
 {{end}}

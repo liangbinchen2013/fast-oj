@@ -37,6 +37,10 @@ const (
 	// problem.edit 走：那两项给的是改题面和改数据的权力，而这一项等于把"在判机上执行
 	// 一段别人写的代码"的权力发出去。
 	permJudgeProgram = "judge_program.edit"
+	// permRejudge 单独管"把别人的提交退回队列重判"。它不该跟着 submission.view.any 走：
+	// 那一项给的是"看得到什么"，而这一项改的是"结果是什么"——重判会清掉逐用例行、覆盖
+	// 已有判定，被重判的人的得分、榜单与积分都跟着动。
+	permRejudge = "submission.rejudge"
 )
 
 // bannedFrom is the refusal for those three: the account is still active and can

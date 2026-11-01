@@ -28,6 +28,15 @@
 </table>
 </div>
 
+{{if .Data.CanRejudge}}
+<form class="inline" method="post" action="/submissions/{{.Data.ID}}/rejudge"
+      onsubmit="return confirm('重判 #{{.Data.ID}}？上一次的判定与逐用例会被清掉，判机重跑后按今天的口径重写。');">
+  <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
+  <p class="meta">判机口径变了，旧提交不会自己改判。<button type="submit">重新判题</button>
+    —— 退回队列，清掉这一次的判定与逐用例，判机重跑后按今天的口径重写；已经在跑的那一次回报会被丢掉。</p>
+</form>
+{{end}}
+
 {{if and .Data.View.Runs .Data.Runs}}
   <h2>逐用例</h2>
   <div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
