@@ -101,6 +101,17 @@ func (g *plainGuard) Measure() (int, int) {
 
 func (g *plainGuard) Close() error { return nil }
 
+// signalled 说这次运行是**被信号打死**的，而不是自己 exit 非零。Go 的
+// `ProcessState.ExitCode()` 把所有信号死都记成 -1，具体哪个信号只能从 wait status 里读，
+// 而"跑都没跑起来"这件事判定上要区分出来（见 elfimage.go），所以直接问内核。
+func signalled(state *os.ProcessState) bool {
+	if state == nil {
+		return false
+	}
+	ws, ok := state.Sys().(syscall.WaitStatus)
+	return ok && ws.Signaled()
+}
+
 // cpuMS converts the child rusage from the wait status; timevals are seconds
 // plus microseconds.
 func cpuMS(ru *syscall.Rusage) int {

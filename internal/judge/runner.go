@@ -190,6 +190,8 @@ func Run(argv []string, dir string, stdin []byte, lim Limits) Execution {
 	if lim.TimeMS <= 0 {
 		lim.TimeMS = 1000
 	}
+	// 一次文件头解析：用来把"数组开太大、还没跑就崩"的那次崩溃解释对（见 elfimage.go）。
+	image := imageMemKB(bin)
 
 	cmd := exec.Command(bin, argv[1:]...)
 	cmd.Dir = dir
@@ -293,6 +295,8 @@ func Run(argv []string, dir string, stdin []byte, lim Limits) Execution {
 		if ex.Verdict == RE && w.err != nil {
 			ex.Note = w.err.Error()
 		}
+		// 镜像本身就超上限的那种崩溃，报 RE + 一个很小的内存数是误导：改判 MLE 并说清原因。
+		markImageOOM(&ex, lim, image, signalled(w.state))
 		return ex
 
 	case mem := <-trip:

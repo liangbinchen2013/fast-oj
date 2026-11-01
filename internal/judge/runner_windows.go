@@ -128,3 +128,7 @@ func (g *jobGuard) Close() error {
 	}
 	return nil
 }
+
+// signalled 在 Windows 上永远是 false：那里没有"被信号打死"这回事，击杀就是退出码。
+// 要靠它判 MLE 的那条修正本来也只在读得出 ELF 镜像的平台上生效（见 elfimage.go）。
+func signalled(state *os.ProcessState) bool { return false }
