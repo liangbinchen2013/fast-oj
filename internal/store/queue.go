@@ -197,3 +197,40 @@ func (db *DB) RequeueAbandoned(ctx context.Context, submissionID int64) (bool, e
 	}
 	return requeued, nil
 }
+
+// Rejudge 把一条**已经有结论**的提交退回队列，并清掉上一次的判定与逐用例行。
+//
+// 判题口径是会变的（见 0036 那份迁移），而库里的判定是当时那一次运行的结果，不会因为判机
+// 升级就自己改判——重判是管理员唯一的补救：退回 queued，判机按今天的口径重跑一次。
+//
+// 已经在飞的那一次盖不掉新结果：这里把 judge_id 清成 NULL，旧判机回报时先在归属检查上吃
+// 403，即使同一台判机重新领到它，status='queued' 也不允许直接跳 Done。toolchain 一起清掉，
+// 因为那句"我这次实际用的口径"是上一台判机说的，得让判过新的那台重新说。
+func (db *DB) Rejudge(ctx context.Context, submissionID int64) (bool, error) {
+	requeued := false
+	err := db.InTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE submissions SET status='queued', verdict='', judge_id=NULL, detail='',
+			           time_ms=-1, mem_kb=-1, time_min=0, mem_min=0, score=0, failed_case='',
+			           toolchain='', started_at=NULL, judged_at=NULL
+			 WHERE id=? AND status<>'queued'`, submissionID)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return errStaleStatus
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM runs WHERE submission_id=?`, submissionID); err != nil {
+			return err
+		}
+		requeued = true
+		return nil
+	})
+	if errors.Is(err, errStaleStatus) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return requeued, nil
+}

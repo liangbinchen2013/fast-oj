@@ -16,7 +16,7 @@ type SubmissionDetail struct {
 	// the profile link, because the tombstone page is where the records live.
 	Name string `json:"name"`
 	// Color 是这个名字的活跃度档位（见 feed.go 里同名的理由）。
-	Color         string `json:"color,omitempty"`
+	Color string `json:"color,omitempty"`
 	// DetailLevel and ProblemOwner come from the problem row: they decide how much
 	// of this submission's judging detail the reader is shown.
 	DetailLevel  string `json:"detail_level"`
@@ -61,8 +61,11 @@ func (db *DB) SubmissionDetail(ctx context.Context, id int64) (SubmissionDetail,
 type DetailFilter struct {
 	UserID    int64
 	ProblemID int64
-	AfterID   int64
-	Limit     int
+	// Status 按 submissions.status 筛。值是绑定参数，不是拼进 SQL 的：认不出来的状态
+	// 只会得到空列表，不会意外放宽成"看全部"。管理员拿它找那些停在队列里或判机超时的人。
+	Status  string
+	AfterID int64
+	Limit   int
 }
 
 func (db *DB) ListSubmissionDetails(ctx context.Context, f DetailFilter) ([]SubmissionDetail, error) {
@@ -81,6 +84,10 @@ func (db *DB) ListSubmissionDetails(ctx context.Context, f DetailFilter) ([]Subm
 	if f.ProblemID != 0 {
 		q += ` AND s.problem_id=?`
 		args = append(args, f.ProblemID)
+	}
+	if f.Status != "" {
+		q += ` AND s.status=?`
+		args = append(args, f.Status)
 	}
 	if f.AfterID != 0 {
 		q += ` AND s.id<?`
