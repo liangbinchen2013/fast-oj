@@ -1,5 +1,5 @@
 > [!IMPORTANT]
-> 本项目理论上不会再接受UI上的美化，除非丝毫不占用性能，目前将打算使用油猴脚本美化页面。
+> 本项目理论上不会再接受UI上的美化，除非是[这样的](https://github.com/liangbinchen2013/fast-oj/pull/4)更新，会接受。
 
 # fast-oj
 
