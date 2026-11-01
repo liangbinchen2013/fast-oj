@@ -4,6 +4,7 @@
   · <a href="/problems/{{.Data.PID}}">题面页</a>
   · <a href="/problems/{{.Data.PID}}/edit">改题面与配置</a></p>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr>
     <th class="num">#</th><th>名称</th><th>类型</th><th>组</th>
@@ -24,12 +25,14 @@
   <tr><td colspan="8">还没有用例，现在提交只会得到「无数据」。</td></tr>
   {{end}}
 </table>
+</div>
 
 {{if .Data.Rows}}
 <h2>批量改分值与捆绑</h2>
 <p class="meta">一行一条，改完整页保存。名称与数据文件不在这里改（要改名或换数据用上面的「编辑」，成批换数据用 zip 导入）。</p>
 <form method="post" action="/problems/{{.Data.PID}}/cases/batch">
   <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
+  <div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
   <table class="batch">
     <tr><th class="num">#</th><th>名称</th><th class="num">分值</th><th>组名（留空 = 各算各的）</th><th class="num">样例</th></tr>
     {{range .Data.Rows}}
@@ -42,6 +45,7 @@
     </tr>
     {{end}}
   </table>
+  </div>
   <p class="row">
     <input type="submit" value="保存整批">
     <span class="meta">或者先让系统填一版，核对后再保存：</span>
@@ -93,12 +97,14 @@
 {{if .Data.Groups}}
 <h2>捆绑</h2>
 <p class="meta">一组用例要全过才给分：组里任何一条没过（或判机没跑完这一组），整组一分不得。</p>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>组名</th><th class="num">条数</th><th class="num">全过得</th></tr>
   {{range .Data.Groups}}
   <tr><td><code>{{.Name}}</code></td><td class="num">{{.Cases}}</td><td class="num">{{.Points}}</td></tr>
   {{end}}
 </table>
+</div>
 {{end}}
 
 <h2>判题方式</h2>

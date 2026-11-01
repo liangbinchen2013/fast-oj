@@ -1,17 +1,21 @@
 {{define "content"}}
-<h1>登录</h1>
+<div class="auth-shell">
+  <section class="auth-card">
+    <h1>登录</h1>
 
-<form method="post" action="/login">
-  <input type="hidden" name="next" value="{{.Data.Next}}">
-  <label>邮箱或用户名</label>
-  <input type="text" name="identifier" value="{{.Data.Identifier}}" autocomplete="username" required>
-  <label>密码</label>
-  <input type="password" name="password" autocomplete="current-password" required>
-  {{template "humanfield" .Data.Human}}
-  <p><input type="submit" value="登录"></p>
-</form>
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{.Data.Next}}">
+      <label for="login-identifier">邮箱或用户名</label>
+      <input type="text" id="login-identifier" name="identifier" value="{{.Data.Identifier}}" autocomplete="username" required>
+      <label for="login-password">密码</label>
+      <input type="password" id="login-password" name="password" autocomplete="current-password" required>
+      {{template "humanfield" .Data.Human}}
+      <p><input type="submit" value="登录"></p>
+    </form>
+
+    <p class="auth-note">还没有账号？<a href="/register">注册</a>。</p>
+  </section>
+</div>
 
 {{template "humanverify" .Data.Human}}
-
-<p class="meta">还没有账号？<a href="/register">注册</a>。邮箱暂不发送验证邮件，注册后即可使用。</p>
 {{end}}

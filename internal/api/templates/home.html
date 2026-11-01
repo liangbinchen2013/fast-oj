@@ -1,14 +1,24 @@
 {{define "content"}}
-<section class="hero">
-  <h1>{{.Site.Title}}</h1>
-  <div class="tagline">{{markdown .Site.Tagline}}</div>
-  <p class="stats">
-    题库 <b>{{.Data.Counts.Problems}}</b> 题 ·
-    用户 <b>{{.Data.Counts.Users}}</b> 人 ·
-    提交 <b>{{.Data.Counts.Submissions}}</b> 次
-    {{if .Data.Counts.Pending}} · 队列中 <b>{{.Data.Counts.Pending}}</b>{{end}}
-  </p>
-  {{if not .Data.Registered}}<p class="meta">当前已关闭注册。</p>{{end}}
+<div class="home-heading">
+  <div>
+    <h1>{{.Site.Title}}</h1>
+    <div class="tagline">{{markdown .Site.Tagline}}</div>
+  </div>
+  <form class="home-search" method="get" action="/problems">
+    <label for="home-query">查找题目</label>
+    <div class="search-field">
+      <input id="home-query" type="search" name="q" placeholder="题目编号或标题">
+      <input type="submit" value="搜索">
+    </div>
+  </form>
+</div>
+
+<div class="home-summary">
+  <p class="site-counts" aria-label="站点统计"><span>题库 <b>{{.Data.Counts.Problems}}</b> 题</span><span>用户 <b>{{.Data.Counts.Users}}</b> 人</span><span>提交 <b>{{.Data.Counts.Submissions}}</b> 次</span></p>
+  <p class="queue-state">{{if .Data.Counts.Pending}}<a href="/submissions">{{.Data.Counts.Pending}} 次提交等待判题</a>{{else}}暂无等待中的提交{{end}}</p>
+</div>
+{{if or .Me (not .Data.Registered)}}
+<div class="home-tools">
   {{if .Me}}
   <form method="post" action="/checkin" class="checkin inline">
     <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
@@ -16,41 +26,54 @@
     <span class="meta">连续 <b>{{.Data.CheckIn.Streak}}</b> 天 · 累计 {{.Data.CheckIn.Total}} 天</span>
   </form>
   {{end}}
-</section>
-
-<h2>最新帖子</h2>
-<div class="cards">
-  {{range .Data.Topics}}
-  <a class="card" href="/topics/{{.ID}}">
-    <header>
-      <span class="badge {{if eq .Kind "help"}}warn{{end}}">{{.KindLabel}}</span>
-      <span class="when">{{.When}}</span>
-    </header>
-    <b class="card-title">{{.Title}}</b>
-    <p class="when"><span class="pt-{{.Color}}">{{.DisplayName}}</span>{{if .HasProblem}} · {{.ProblemPID}}{{end}} · 评论 {{.Comments}}</p>
-  </a>
-  {{else}}
-  <p class="meta">还没有帖子。<a href="/topics/new">来发第一帖</a>。</p>
-  {{end}}
+  {{if not .Data.Registered}}<p class="meta">当前已关闭注册。</p>{{end}}
 </div>
-<p class="meta"><a href="/topics">社区贴</a> · <a href="/topics/new">发帖</a>（登录后才能发）</p>
+{{end}}
 
-{{template "composer" .}}
-{{template "posts" .}}
+<div class="home-grid">
+  <div class="home-main">
+    <section class="panel">
+      <div class="section-heading"><h2>最新题目</h2><a href="/problems">全部题目</a></div>
+      {{if .Data.Problems}}
+      <div class="table-scroll" role="region" aria-label="最新题目" tabindex="0">
+        <table>
+          <tr><th>编号</th><th>标题</th><th class="num">时限</th><th class="num">内存</th></tr>
+          {{range .Data.Problems}}
+          <tr>
+            <td><a href="/problems/{{.PID}}">{{.PID}}</a></td>
+            <td><a href="/problems/{{.PID}}">{{.Title}}</a></td>
+            <td class="num">{{.TimeLimitMS}}ms</td>
+            <td class="num">{{.MemLimitKB}}KB</td>
+          </tr>
+          {{end}}
+        </table>
+      </div>
+      {{else}}
+      <div class="empty-state"><p>题库中还没有题目。</p>{{if .Me}}{{if .Me.Author}}<a href="/problems/new">添加题目</a>{{end}}{{end}}</div>
+      {{end}}
+    </section>
 
-<h2>最新题目</h2>
-<table>
-  <tr><th>编号</th><th>标题</th><th class="num">时限</th><th class="num">内存</th></tr>
-  {{range .Data.Problems}}
-  <tr>
-    <td><a href="/problems/{{.PID}}">{{.PID}}</a></td>
-    <td><a href="/problems/{{.PID}}">{{.Title}}</a></td>
-    <td class="num">{{.TimeLimitMS}}ms</td>
-    <td class="num">{{.MemLimitKB}}KB</td>
-  </tr>
-  {{else}}
-  <tr><td colspan="4">还没有题目。</td></tr>
-  {{end}}
-</table>
-<p class="meta"><a href="/problems">全部题目 →</a></p>
+    <section class="panel home-feed">
+      <div class="section-heading"><h2>动态</h2><a href="/feed">全部动态</a></div>
+      {{template "composer" .}}
+      {{template "posts" .}}
+      {{if not .Data.Posts}}<p class="meta">还没有动态。</p>{{end}}
+    </section>
+  </div>
+
+  <section class="panel home-topics">
+    <div class="section-heading"><h2>最新讨论</h2><a href="/topics">全部帖子</a></div>
+    <div class="topic-list">
+      {{range .Data.Topics}}
+      <a class="topic-row" href="/topics/{{.ID}}">
+        <span class="topic-title">{{.Title}}</span>
+        <span class="topic-meta"><span>{{.KindLabel}}</span><span class="pt-{{.Color}}">{{.DisplayName}}</span>{{if .HasProblem}}<span>{{.ProblemPID}}</span>{{end}}<span>{{.Comments}} 条评论</span><span>{{.When}}</span></span>
+      </a>
+      {{else}}
+      <div class="empty-state"><p>还没有帖子。</p></div>
+      {{end}}
+    </div>
+    <p class="topic-action"><a href="/topics/new">发帖</a>{{if not .Me}} · 登录后才能发帖{{end}}</p>
+  </section>
+</div>
 {{end}}

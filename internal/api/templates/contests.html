@@ -3,14 +3,15 @@
 
 <form class="row" method="get" action="/contests">
   <div style="flex:1 1 18rem">
-    <label>搜索</label>
-    <input type="text" name="q" placeholder="编号或标题" value="{{.Data.Query}}">
+    <label for="contest-search">搜索比赛</label>
+    <input id="contest-search" type="search" name="q" placeholder="输入比赛编号或标题" value="{{.Data.Query}}">
   </div>
   <input type="submit" value="搜索">
 </form>
 
 {{if .Data.CanHost}}<p class="meta"><a href="/contests/new">新建比赛</a></p>{{end}}
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr>
     <th>编号</th><th>标题</th><th>状态</th><th>赛制</th>
@@ -33,6 +34,7 @@
   <tr><td colspan="9">还没有比赛。</td></tr>
   {{end}}
 </table>
+</div>
 
 <p class="meta">
   共 {{.Data.Total}} 场

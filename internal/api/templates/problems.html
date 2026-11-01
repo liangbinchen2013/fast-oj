@@ -3,12 +3,13 @@
 
 <form class="row" method="get" action="/problems">
   <div style="flex:1 1 18rem">
-    <label>搜索</label>
-    <input type="text" name="q" placeholder="编号或标题" value="{{.Data.Query}}">
+    <label for="problem-search">搜索题目</label>
+    <input id="problem-search" type="search" name="q" placeholder="输入题目编号或标题" value="{{.Data.Query}}">
   </div>
   <input type="submit" value="搜索">
 </form>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr>
     <th>编号</th><th>标题</th>
@@ -29,6 +30,7 @@
   <tr><td colspan="7">还没有题目。</td></tr>
   {{end}}
 </table>
+</div>
 
 <p class="meta">
   共 {{.Data.Total}} 题
