@@ -4,6 +4,7 @@
   标着<b>超级管理员</b>的那一行除外：他的权限、角色和状态只有他自己能动。
   新班级开学建号：<a href="/admin/accounts/new">批量建号</a>。</p>
 
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th class="num">ID</th><th>用户名</th><th class="num">积分</th><th>邮箱</th><th>角色</th><th>状态</th><th></th></tr>
   {{range .Data.Users}}
@@ -22,4 +23,5 @@
   </tr>
   {{end}}
 </table>
+</div>
 {{end}}

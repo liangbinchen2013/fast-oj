@@ -35,8 +35,8 @@
 {{else if .Data.SignedIn}}
 <form method="post" action="/feed" class="composer">
   <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
-  <label>说点什么（支持 Markdown 与 $KaTeX$ 公式）</label>
-  <textarea name="body" rows="3" maxlength="4000" placeholder="今天调了什么题？"></textarea>
+  <label for="feed-body">说点什么（支持 Markdown 与 $KaTeX$ 公式）</label>
+  <textarea id="feed-body" name="body" rows="3" maxlength="4000" placeholder="今天调了什么题？"></textarea>
   <p><input type="submit" value="发布"></p>
 </form>
 {{else}}

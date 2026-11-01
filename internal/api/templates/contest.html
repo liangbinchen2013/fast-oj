@@ -23,6 +23,7 @@
 
 <h2>题目</h2>
 {{if .Data.Access.ShowProblems}}
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>题号</th><th>题目</th><th class="num">分值</th></tr>
   {{range .Data.Problems}}
@@ -35,6 +36,7 @@
   <tr><td colspan="3">这场比赛还没挂题。</td></tr>
   {{end}}
 </table>
+</div>
 <p class="meta">判题详情按题目自己设的级别给，比赛不额外放行；比赛内分值 = 题目分值 ×（设定分 ÷ 题目满分）。
   名次与每题最好成绩在 <a href="{{.Data.StandLink}}">成绩榜</a>。</p>
 {{else}}
@@ -63,6 +65,7 @@
 {{if .Data.Access.ShowMembers}}
 <h2>名单（{{.Data.Members}} 人）</h2>
 {{if .Data.Teams}}
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>队伍</th><th>成员</th></tr>
   {{range .Data.Teams}}
@@ -72,6 +75,7 @@
   </tr>
   {{end}}
 </table>
+</div>
 {{end}}
 {{if .Data.Solo}}
 <p class="meta">个人：{{range .Data.Solo}}<a href="/u/{{.}}">{{.}}</a> {{end}}</p>

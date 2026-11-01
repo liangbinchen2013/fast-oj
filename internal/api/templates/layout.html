@@ -7,46 +7,58 @@
 <link rel="stylesheet" href="{{static "style.css"}}">
 <script defer src="{{static "math.js"}}"></script>
 </head>
-<body>
-<nav class="top">
-  <a class="brand" href="/">{{.Site.Title}}</a>
-  <a href="/problems">题目</a>
-  <a href="/contests">比赛</a>
-  <a href="/topics">帖子</a>
-  <a href="/feed">动态</a>
-  <a href="/rank">排行榜</a>
-  <a href="/submissions">提交</a>
+<body data-page="{{.Page}}">
+<a class="skip-link" href="#main-content">跳至主要内容</a>
+<header class="site-header">
+<nav class="top" aria-label="主导航">
+  <a class="brand" href="/"{{if eq .Section ""}} aria-current="page"{{end}}>{{.Site.Title}}</a>
+  <div class="nav-links">
+    <a href="/problems"{{if eq .Section "problems"}} aria-current="page"{{end}}>题目</a>
+    <a href="/contests"{{if eq .Section "contests"}} aria-current="page"{{end}}>比赛</a>
+    <a href="/topics"{{if eq .Section "topics"}} aria-current="page"{{end}}>帖子</a>
+    <a href="/feed"{{if eq .Section "feed"}} aria-current="page"{{end}}>动态</a>
+    <a href="/rank"{{if eq .Section "rank"}} aria-current="page"{{end}}>排行榜</a>
+    <a href="/submissions"{{if eq .Section "submissions"}} aria-current="page"{{end}}>提交</a>
+  </div>
   {{if .Me}}
-  <a href="/tickets">工单{{if .Me.Tickets}} <b class="badge bad">{{.Me.Tickets}}</b>{{end}}</a>
-  {{if .Me.Author}}<a href="/problems/new">出题</a>{{end}}
-  {{if .Me.Contests}}<a href="/contests/new">办赛</a>{{end}}
-  {{if .Me.Manage}}<a href="/admin/perms">权限</a>{{end}}
-  {{if .Me.Site}}<a href="/admin/site">站点</a>{{end}}
-  {{if .Me.Site}}<a href="/admin/points">积分</a>{{end}}
-  {{if .Me.Stats}}<a href="/admin/stats">统计</a>{{end}}
-  {{if .Me.IPs}}<a href="/admin/ips">封禁</a>{{end}}
-  {{if .Me.Audit}}<a href="/admin/audit">审计</a>{{end}}
-  <form class="inline" method="post" action="/logout">
-    <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
-    <button type="submit">退出</button>
-  </form>
-  <span class="me">
-    <a class="pt-{{.Me.Color}}" href="/u/{{.Me.Handle}}">{{.Me.Name}}</a>
-    <a href="/settings">设置</a>
-    <a href="/messages">私信{{if .Me.Unread}} <b class="badge bad">{{.Me.Unread}}</b>{{end}}</a>
-  </span>
+  <div class="me">
+    <a class="inbox-link" href="/messages"{{if eq .Section "messages"}} aria-current="page"{{end}}>私信{{if .Me.Unread}} <b class="badge bad">{{.Me.Unread}}</b>{{end}}</a>
+    <details class="account-menu">
+      <summary><span class="pt-{{.Me.Color}}">{{.Me.Name}}</span><span class="chevron" aria-hidden="true"></span>{{if .Me.Tickets}}<b class="badge bad">{{.Me.Tickets}}</b>{{end}}</summary>
+      <div class="account-panel">
+        <a class="account-profile pt-{{.Me.Color}}" href="/u/{{.Me.Handle}}">{{.Me.Name}}<small>@{{.Me.Handle}} · 个人主页</small></a>
+        <div class="account-links">
+          <a href="/settings">个人设置</a>
+          <a href="/tickets">工单{{if .Me.Tickets}} <b class="badge bad">{{.Me.Tickets}}</b>{{end}}</a>
+          {{if .Me.Author}}<a href="/problems/new">出题</a>{{end}}
+          {{if .Me.Contests}}<a href="/contests/new">办赛</a>{{end}}
+          {{if .Me.Manage}}<a href="/admin/perms">权限</a>{{end}}
+          {{if .Me.Site}}<a href="/admin/site">站点</a><a href="/admin/points">积分</a>{{end}}
+          {{if .Me.Stats}}<a href="/admin/stats">统计</a>{{end}}
+          {{if .Me.IPs}}<a href="/admin/ips">封禁</a>{{end}}
+          {{if .Me.Audit}}<a href="/admin/audit">审计</a>{{end}}
+        </div>
+        <form class="inline account-logout" method="post" action="/logout">
+          <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
+          <button type="submit">退出登录</button>
+        </form>
+      </div>
+    </details>
+  </div>
   {{else}}
-  <span class="me">
-    <a class="acct" href="/login">登录</a>
-    <a href="/register">注册</a>
-  </span>
+  <div class="me">
+    <a class="acct" href="/login"{{if eq .Section "login"}} aria-current="page"{{end}}>登录</a>
+    <a class="button button-secondary button-small" href="/register"{{if eq .Section "register"}} aria-current="page"{{end}}>注册</a>
+  </div>
   {{end}}
 </nav>
-<main>
-  {{if .Flash}}<p class="flash">{{.Flash}}</p>{{end}}
+</header>
+<main id="main-content" tabindex="-1">
+  {{if .Flash}}<p class="flash" role="status">{{.Flash}}</p>{{end}}
   {{block "content" .}}（空白页）{{end}}
 </main>
 <footer class="top">
+  <div class="footer-bar"><span class="footer-brand">{{.Site.Title}}</span><div><a href="/about">关于本站</a><a href="/topics">社区交流</a></div></div>
   {{if .Site.Footer}}<div class="foot-note">{{markdown .Site.Footer}}</div>{{end}}
   {{if .Site.Links}}
   <div class="links">友情链接：

@@ -15,14 +15,17 @@
 </div>
 
 <h2>请求量</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>项</th><th class="num">次数</th><th>说明</th></tr>
   {{range .Data.Columns}}
   <tr><td>{{.Label}}</td><td class="num">{{.Value}}</td><td class="meta">{{.Note}}</td></tr>
   {{end}}
 </table>
+</div>
 
 <h2>判定分布</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>结果</th><th class="num">条</th></tr>
   {{range .Data.Verdicts}}
@@ -31,8 +34,10 @@
   <tr><td colspan="2">还没有提交。</td></tr>
   {{end}}
 </table>
+</div>
 
 <h2>最近两周的提交</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>日期</th><th class="num">条</th></tr>
   {{range .Data.Days}}
@@ -41,8 +46,10 @@
   <tr><td colspan="2">这两周没人提交。</td></tr>
   {{end}}
 </table>
+</div>
 
 <h2>提交最多的题</h2>
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
 <table>
   <tr><th>题目</th><th class="num">条</th></tr>
   {{range .Data.Top}}
@@ -51,4 +58,5 @@
   <tr><td colspan="2">还没有提交。</td></tr>
   {{end}}
 </table>
+</div>
 {{end}}

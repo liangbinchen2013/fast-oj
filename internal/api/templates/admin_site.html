@@ -60,7 +60,7 @@
     <div>
       <label>服务器地址</label>
       <input type="text" name="smtp_host" value="{{.Data.Site.SMTP.Host}}" maxlength="200"
-        placeholder="smtp.example.com" spellcheck="false" autocomplete="off">
+        placeholder="SMTP 服务器域名" spellcheck="false" autocomplete="off">
     </div>
     <div>
       <label>端口</label>
@@ -82,7 +82,7 @@
     placeholder="{{if .Data.Site.SMTP.Password}}••••••（已保存，输入新值以替换）{{else}}还没填{{end}}">
   <label>发件地址</label>
   <input type="text" name="smtp_from" value="{{.Data.Site.SMTP.From}}" maxlength="200"
-    placeholder="noreply@example.com" spellcheck="false" autocomplete="off">
+    placeholder="用于发信的邮箱地址" spellcheck="false" autocomplete="off">
 
   <h2>发送测试邮件</h2>
   <p class="meta">这一条是拿<b>上面刚填的</b>值去连服务器，不用先保存。
