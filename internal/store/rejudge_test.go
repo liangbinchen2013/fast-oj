@@ -147,3 +147,54 @@ func TestListSubmissionDetailsFiltersByStatus(t *testing.T) {
 		t.Fatalf("乱填的状态值 = %+v %v，想要空列表", none, err)
 	}
 }
+
+// 0003 立下的规则一直成立着："admin 这一档拿着全部管理侧权限"。每加一把新钥匙都要同时进
+// role_permissions，否则升级之后管理员发现自己按不了，还得挨个手工发——"迁移加了键、忘了
+// 发给 admin"恰好是只有到了生产上才会被发现的那类错，所以把它变成一条会红的测试。
+func TestAdminRoleHoldsEveryStaffPermission(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	staff := map[string]bool{}
+	rows, err := db.SQL.QueryContext(ctx, `SELECT key FROM permissions WHERE staff=1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			t.Fatal(err)
+		}
+		staff[key] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	granted := map[string]bool{}
+	rows, err = db.SQL.QueryContext(ctx, `SELECT key FROM role_permissions WHERE role='admin'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			t.Fatal(err)
+		}
+		granted[key] = true
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	for key := range staff {
+		if !granted[key] {
+			t.Errorf("admin 这一档没有 %q：新迁移要同时写 role_permissions", key)
+		}
+	}
+	if !staff["submission.rejudge"] {
+		t.Error("重判没被标成管理侧权限：授予它就等于工作人员，不该是普通人的日常能力")
+	}
+}
