@@ -21,6 +21,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/liangbinchen2013/fast-oj/internal/jail"
 )
 
 // Duo 是一次交互判题的两个进程。
@@ -76,7 +78,10 @@ func startNote(err error, cmd *exec.Cmd) string {
 
 // fill 把一次 wait 的结果写进 Execution。verdictFor 拿到的是零值 Limits：时限与内存由
 // RunDuo 按"两侧之和"与"只算选手"这两条口径统一判，这一步只认退出码与实测值。
-func (e *Execution) fill(w waitResult, out, errBuf *limitedBuffer, g Guard) {
+//
+// st 是这一侧那一把的状态信道：牢房建成没有只从它上面读，不读 stderr——那一份是选手与
+// 交互器各自打印的，谁都能写出一句"OJ-JAIL:"（见 internal/jail 的 Status）。
+func (e *Execution) fill(w waitResult, out, errBuf *limitedBuffer, g Guard, st *jail.Status) {
 	_, memKB := g.Measure()
 	timeMS := usageMS(w.state)
 	if timeMS < 0 {
@@ -87,9 +92,10 @@ func (e *Execution) fill(w waitResult, out, errBuf *limitedBuffer, g Guard) {
 	}
 	e.TimeMS, e.MemKB, e.Exit = timeMS, memKB, exitCode(w.err)
 	e.Stdout, e.Stderr = out.Bytes(), errBuf.Bytes()
-	if note, jailed := jailFailure(errBuf.Bytes()); jailed {
+	if reason, broken := jailBrokenFrom(st, e.Exit); broken {
 		// 牢房没建起来不是学生的错，也不该由交互器背：报判机故障。
-		reportSandbox(false, note)
+		note := jailBrokenNote(reason)
+		reportJailBroken(note)
 		e.Verdict, e.Note = IE, note
 		return
 	}
@@ -127,14 +133,14 @@ func stopBoth(userGuard, itxGuard Guard) {
 
 // finish 把两边的收尾写进 Duo。没收到的那一侧留成判机故障：判机不知道它去了哪里。
 func (d *Duo) finish(w duoWait, userOut, userErr, itxOut, itxErr *limitedBuffer,
-	userGuard, itxGuard Guard) {
+	userGuard, itxGuard Guard, userSt, itxSt *jail.Status) {
 	if w.user != nil {
-		d.User.fill(*w.user, userOut, userErr, userGuard)
+		d.User.fill(*w.user, userOut, userErr, userGuard, userSt)
 	} else {
 		d.User.Verdict, d.User.Note = IE, orText(d.User.Note, "选手程序没能收尾")
 	}
 	if w.itx != nil {
-		d.Interactor.fill(*w.itx, itxOut, itxErr, itxGuard)
+		d.Interactor.fill(*w.itx, itxOut, itxErr, itxGuard, itxSt)
 	} else {
 		d.Interactor.Verdict, d.Interactor.Note = IE, orText(d.Interactor.Note, "交互器没能收尾")
 	}
@@ -214,6 +220,21 @@ func RunDuo(userArgv, interactorArgv []string, dir string, userLim, interactorLi
 	if err != nil {
 		return giveUp(duoInteractor, "pipe: "+err.Error())
 	}
+
+	// 两边各自一条状态信道（为什么不能用 stderr 见 internal/jail 的 Status）：交互器也是
+	// 别人写的代码，它那一侧的输出同样不可信。
+	userSt, err := newJailStatus(userLim)
+	if err != nil {
+		return giveUp(duoUser, "牢房的状态信道建不起来，不敢裸跑: "+err.Error())
+	}
+	defer userSt.Remove()
+	userLim.jailStatus = userSt
+	itxSt, err := newJailStatus(interactorLim)
+	if err != nil {
+		return giveUp(duoInteractor, "牢房的状态信道建不起来，不敢裸跑: "+err.Error())
+	}
+	defer itxSt.Remove()
+	interactorLim.jailStatus = itxSt
 
 	userGuard, err := newGuard(userLim)
 	if err != nil {
@@ -311,7 +332,7 @@ func RunDuo(userArgv, interactorArgv []string, dir string, userLim, interactorLi
 	select {
 	case <-copiesDone:
 		w = grabAll(userCmd, itxCmd, 2*reapGrace)
-		d.finish(w, userOut, userErr, itxOut, itxErr, userGuard, itxGuard)
+		d.finish(w, userOut, userErr, itxOut, itxErr, userGuard, itxGuard, userSt, itxSt)
 
 	case t := <-trip:
 		over := "交互器的内存超过它自己的上限 " + strconv.Itoa(interactorLim.MemKB) + "KB 还不止 " +
@@ -322,7 +343,7 @@ func RunDuo(userArgv, interactorArgv []string, dir string, userLim, interactorLi
 		}
 		stopBoth(userGuard, itxGuard)
 		w = settle(2 * reapGrace)
-		d.finish(w, userOut, userErr, itxOut, itxErr, userGuard, itxGuard)
+		d.finish(w, userOut, userErr, itxOut, itxErr, userGuard, itxGuard, userSt, itxSt)
 		if t.side == duoUser {
 			d.User.Verdict, d.User.MemKB, d.User.MemMin, d.User.Note = MLE, t.memKB, true, over
 		} else {
@@ -341,7 +362,7 @@ func RunDuo(userArgv, interactorArgv []string, dir string, userLim, interactorLi
 		if w.user == nil || w.itx == nil {
 			note += "，而且有进程杀不掉"
 		}
-		d.finish(w, userOut, userErr, itxOut, itxErr, userGuard, itxGuard)
+		d.finish(w, userOut, userErr, itxOut, itxErr, userGuard, itxGuard, userSt, itxSt)
 		d.User.Verdict, d.User.TimeMin, d.User.Note = TLE, true, note
 		d.TimeMS = d.User.TimeMS + d.Interactor.TimeMS
 		return d

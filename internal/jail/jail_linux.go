@@ -45,7 +45,11 @@ func Dev() []string   { return append([]string(nil), defaultDev...) }
 // Enter 是 jailer 的正文：此刻进程已经在新的命名空间里，剩下的是把牢房钉死，
 // 然后 exec 真正的程序。顺序是有讲究的——挂载要在 chroot 之前，chroot 要在降权之前
 // （降了权就挂不动了），rlimit 要在 exec 之前（它跟着进程走）。
-func Enter(spec Spec) error {
+//
+// st 是这一把的状态信道：成功走到 exec 前一刻就在那里留一个"exec 起来了"的记号，
+// 任何一步失败由调用方（Main）写上原因。判机拿这两个记号区分"牢房没建起来"与
+// "程序自己 exit 70"——它不再需要从不可信的 stderr 里猜。
+func Enter(spec Spec, st *Status) error {
 	root, err := filepath.Abs(spec.Dir)
 	if err != nil {
 		return err
@@ -97,6 +101,9 @@ func Enter(spec Spec) error {
 	if err := applySeccomp(); err != nil {
 		return fmt.Errorf("系统调用过滤装不上: %w", err)
 	}
+	// exec 之前的最后一笔：留下"提交程序真的被牢房交出去了"的记号。写在 seccomp 之后
+	// 是有意的——过滤器已经装上，这一笔 write 必须在白名单里（write 本来就在）。
+	st.markExeced()
 	return syscall.Exec(bin, argv, jailEnv(spec.Env, root))
 }
 

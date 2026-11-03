@@ -14,6 +14,6 @@ func Binds() []string { return nil }
 
 func Dev() []string { return nil }
 
-func Enter(Spec) error {
+func Enter(_ Spec, _ *Status) error {
 	return errors.New("沙盒需要 Linux 命名空间，这个平台没有")
 }

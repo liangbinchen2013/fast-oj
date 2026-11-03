@@ -39,16 +39,36 @@ func (g *plainGuard) Configure(cmd *exec.Cmd) error {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true, // so Kill takes the whole tree, not just the leader
 	}
-	if _, jailed := jailFor(g.lim); !jailed && g.lim.RunAs != nil {
-		// Dropping the uid also means the program cannot read anything the judge
-		// owns, and RLIMIT-style per-user budgets stop competing with the judge.
-		// Inside a jail the identity is dropped by the jailer instead, after the
-		// mounts and chroot are done.
-		cmd.SysProcAttr.Credential = &syscall.Credential{
-			Uid: g.lim.RunAs.UID, Gid: g.lim.RunAs.GID, NoSetGroups: true,
+	if _, jailed := jailFor(g.lim); !jailed {
+		// 没有牢房，身份这一层就得由判机自己补。以前只有"调用方给了 -run-as"才降，于是
+		// 判机以 root 跑又没写 -run-as 的那台机器上，牢房一旦关掉（无论是内核开不了，还是
+		// 被人用一行假输出关掉），学生的代码就直接在宿主上以 root 跑。
+		if drop := g.unjailedIdentity(); drop != nil {
+			cmd.SysProcAttr.Credential = &syscall.Credential{
+				Uid: drop.UID, Gid: drop.GID, NoSetGroups: true,
+			}
 		}
 	}
 	return applyJail(cmd, g.lim)
+}
+
+// nobodyUID 是"在宿主上什么都不是"的那个号：内核兜底与容器都按它算。
+const nobodyUID = 65534
+
+// unjailedIdentity 回答"这一把没有牢房，那它以谁的身份跑"。
+//
+// 调用方指定了身份就用它；没指定时，判机不是 root 就照旧以自己的身份跑（容器里、或专用
+// 账号下跑的判机本来就没多少可降的），判机**是** root 则兜底压到 nobody——把 root 交给
+// 学生代码永远不是可接受的默认值，哪怕"牢房应该是开着的"。
+func (g *plainGuard) unjailedIdentity() *DropTo {
+	if g.lim.RunAs != nil {
+		return g.lim.RunAs
+	}
+	if os.Getuid() != 0 {
+		// 身份已经由启动判机的那个人定好了；判机也降不动别人的账号。
+		return nil
+	}
+	return &DropTo{UID: nobodyUID, GID: nobodyUID}
 }
 
 func (g *plainGuard) Attach(p *os.Process) error {

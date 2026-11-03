@@ -1,7 +1,6 @@
 package judge
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -10,26 +9,35 @@ import (
 	"github.com/liangbinchen2013/fast-oj/internal/jail"
 )
 
-// jailFailure 认出 jailer 打出来的失败声明：牢房建不起来时必须报 IE，既不能判成 RE
-// 让学生去查自己没跑起来的代码，也不能悄悄按不隔离的老路子重跑一遍。
-func jailFailure(stderr []byte) (string, bool) {
-	for _, line := range bytes.Split(stderr, []byte("\n")) {
-		if note, ok := bytes.CutPrefix(line, []byte(jail.ErrPrefix)); ok {
-			return "沙盒未能建立: " + string(bytes.TrimSpace(note)), true
-		}
-	}
-	return "", false
+// jailFailure 认出一条**伪造的**牢房失败声明——它不再存在，也不该存在。
+//
+// 2026-11-01 之前这里读的是子进程的 stderr 行首，而那份 stderr 同时装编译器与选手程序
+// 的输出：选手打印一行 `OJ-JAIL: ...`（一条 `#line 1 "OJ-JAIL: x"` 的编译错误就够，连
+// 执行都不用）就能让判机把这台机器的牢房永久关掉，后续所有人的提交在宿主上裸跑。ECS 上
+// 实测过：一条提交之后 Jailed() 变成 false，下一条打印 getuid() 得到 0。
+// 失败的事实现在只从 jail.Status 那条一次一用的信道读（见 internal/jail/jail.go）。
+
+// jailBrokenNote 是把"牢房没建成"说给人听的那句话。原因来自 jailer 写在状态信道上的
+// 那一行（见 internal/jail 的 Status）——不再来自 stderr，因为那份输出是选手与编译器
+// 共用的，里面出现 "OJ-JAIL:" 不等于牢房真的没建成。
+func jailBrokenNote(reason string) string {
+	return "沙盒未能建立: " + strings.TrimSpace(reason)
 }
 
-// sandboxProbe 是自测结论的三态。必须有"还没测过"这一档：自测本身就是**通过一次带
-// 牢房的运行**来完成的，如果只有开了/关了两种，启动时默认"关"就会让自测永远不去建
-// 牢房，于是永远"测得过"。
+// sandboxProbe 是自测结论的三态，加上"跑到一半牢房真的建不起来了"这一档。
+//
+// 必须有"还没测过"这一档：自测本身就是**通过一次带牢房的运行**来完成的，如果只有开了/
+// 关了两种，启动时默认"关"就会让自测永远不去建牢房，于是永远"测得过"。
 type sandboxProbe int8
 
 const (
 	probeUnknown     sandboxProbe = iota // 还没自测：该测，所以照计划关牢房
 	probeOK                              // 自测过了，牢房建得起来
 	probeUnavailable                     // 自测过了，这台机器开不了
+	// probeBroken 是另一件事：启动时明明建得起来，跑到一半 jailer 在**可信信道**上报告
+	// 建不起来。这不是"这台机器不隔离"，而是"隔离在中途坏了"——判机必须停下领单，
+	// 而不是接着裸跑下一条（见 judgeagent 里 SandboxBroken 那一步）。
+	probeBroken
 )
 
 // sandbox 是判机启动时定下来的一次性配置，不是每条工单一个值：牢房能不能开、
@@ -86,13 +94,59 @@ func reportSandbox(ok bool, note string) {
 	sandbox.note = note
 }
 
+// reportJailBroken 记下"跑到一半，牢房在可信信道上报告建不起来了"。
+//
+// 与 reportSandbox(false) 的区别是它的来历与后果：那条说的是"这台机器开不了牢房"，
+// 判机可以继续按不隔离干活（并把这件事写在日志与 /judges 上）；这一条说的是隔离在中途
+// 坏了——启动自测刚证明过它能建起来。继续裸跑等于把一条已经确认成立的安全前提悄悄撤掉，
+// 所以这里只停"不再尝试牢房"，把要不要继续干活交给 SandboxBroken 的读者（判机的主循环
+// 会因此退出领单，由 systemd 重启后重新自测）。
+func reportJailBroken(note string) {
+	sandbox.probed = probeBroken
+	sandbox.note = note
+}
+
+// SandboxBroken 报告判机是不是撞上了"中途建不起牢房"。
+func SandboxBroken() bool { return sandbox.probed == probeBroken }
+
+// newJailStatus 建这一把运行的状态信道。不打算建牢房的那些配置与平台返回 nil，
+// 此时 jailBrokenFrom 也无从判断——那正是它的语义：没有牢房，就没有"牢房坏了"。
+func newJailStatus(lim Limits) (*jail.Status, error) {
+	if _, jailed := jailFor(lim); !jailed {
+		return nil, nil
+	}
+	return jail.NewStatus()
+}
+
+// jailBrokenFrom 读一把运行的状态信道：牢房到底建没建成。
+//
+// 只认两种事实：jailer 在这一把的信道上写下"失败+原因"（暗号对得上才算），以及
+// "退出码 70 而信道上既没有 exec 记号也没有失败声明"——那就是 jailer 连程序都没交出去、
+// 又没能把原因写上来。选手程序可以 exit(70)，但它被 exec 起来的时候 exec 记号已经在信道
+// 里了，所以这半个条件伪造不出来。
+//
+// st 为 nil 表示这一把根本不建牢房（判机没开沙盒，或平台不支持），此时无从判断。
+func jailBrokenFrom(st *jail.Status, exit int) (string, bool) {
+	if reason, reported := st.Failure(); reported {
+		return reason, true
+	}
+	if st != nil && exit == jail.FailExit && !st.Execed() {
+		return "jailer 以退出码 70 结束，但状态信道上什么都没有", true
+	}
+	return "", false
+}
+
 // jailFor 决定这一次运行要不要关进牢房，以及牢房长什么样。
 //
 // 自测已经判定"这台开不了"之后就不再试：-sandbox=auto 的语义是"能开就开"，不是
 // "开不了就让每条提交撞上建不起来的牢房"。后者正是 ECS 上撞到的那件事——判机一边在
 // 日志里写着"沙盒未启用"，一边把每条工单都判成 IE。
+//
+// probeBroken 也走"不再尝试"这一条，但它是**另一回事**：那次结论来自可信信道，而
+// SandboxBroken 会据此把判机停在领单之外，不留下"继续裸跑"这个选项。
 func jailFor(lim Limits) (jail.Spec, bool) {
-	if sandbox.mode == jail.Off || sandbox.self == "" || sandbox.probed == probeUnavailable {
+	if sandbox.mode == jail.Off || sandbox.self == "" ||
+		sandbox.probed == probeUnavailable || sandbox.probed == probeBroken {
 		return jail.Spec{}, false
 	}
 	procs := lim.MaxProcs

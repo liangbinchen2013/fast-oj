@@ -471,6 +471,14 @@ func (a *Agent) Run(ctx context.Context) error {
 		if !worked && !sleep(ctx, a.cfg.Poll) {
 			return ctx.Err()
 		}
+		// 牢房在中途建不起来了——这件事来自 jailer 在那条一次一用信道上的亲口报告，不是
+		// 来自任何输出文本。判机此时已经不能兑现它对外承诺的那层隔离，继续领单就是把下
+		// 一条提交放在裸机上跑，所以退出进程：systemd 会重启它，重启时的启动自测重新回答
+		// "这台机器到底开不开得了牢房"，并按 -sandbox 的语义要么拒绝启动、要么把"未隔离"
+		// 写在日志与 /judges 上。宁可停摆，不悄悄降级。
+		if judge.SandboxBroken() {
+			return fmt.Errorf("牢房在中途建不起来了（%s）：停止领单", judge.SandboxNote())
+		}
 	}
 }
 

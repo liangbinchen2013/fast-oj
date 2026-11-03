@@ -20,6 +20,10 @@ func applyJail(cmd *exec.Cmd, lim Limits) error {
 	spec.Dir = cmd.Dir
 	spec.Argv = append([]string(nil), cmd.Args...)
 	spec.Env = cmd.Env
+	// 状态信道随 spec 一起交给 jailer：这两样东西只出现在 jailer 自己的命令行里，
+	// 而它在 exec 时把命令行换成了提交程序的——选手进程看不到路径，也看不到暗号。
+	spec.Status = lim.jailStatus.Path()
+	spec.Nonce = lim.jailStatus.Nonce()
 	wrapped, err := jail.Wrap(sandbox.self, spec)
 	if err != nil {
 		return err

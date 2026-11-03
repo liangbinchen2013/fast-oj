@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/liangbinchen2013/fast-oj/internal/jail"
 )
 
 const (
@@ -51,6 +53,10 @@ type Limits struct {
 	MaxProcs int
 	// RunAs drops the judged process to an unprivileged user when set.
 	RunAs *DropTo
+	// jailStatus 是这一把运行的状态信道（见 internal/jail 的 Status）：牢房有没有建成
+	// 只从它上面读。由 Run 建、由 applyJail 填进 Spec、由 Run 在收尾时读，不进任何
+	// 用户可见的结构，也不是调用方能填的东西。
+	jailStatus *jail.Status
 }
 
 // Guard is the platform-specific resource enforcement around one process tree.
@@ -192,6 +198,15 @@ func Run(argv []string, dir string, stdin []byte, lim Limits) Execution {
 	}
 	// 一次文件头解析：用来把"数组开太大、还没跑就崩"的那次崩溃解释对（见 elfimage.go）。
 	image := imageMemKB(bin)
+	// 牢房有没有建成，只从一条选手碰不到的信道读（见 internal/jail 的 Status 为什么存在）。
+	// 必须在这里、newGuard 之前放好：guard 拿到的是一份 Limits 的拷贝。
+	// 建不起这条信道就不跑——没有它，一次真的牢房失败会被当成程序自己的崩溃判掉。
+	st, err := newJailStatus(lim)
+	if err != nil {
+		return Execution{Verdict: IE, Note: "牢房的状态信道建不起来，不敢裸跑: " + err.Error()}
+	}
+	lim.jailStatus = st
+	defer st.Remove()
 
 	cmd := exec.Command(bin, argv[1:]...)
 	cmd.Dir = dir
@@ -284,9 +299,11 @@ func Run(argv []string, dir string, stdin []byte, lim Limits) Execution {
 			TimeMS: timeMS, MemKB: memKB, Exit: exitCode(w.err),
 			Stdout: stdout.Bytes(), Stderr: stderr.Bytes(),
 		}
-		if note, jailed := jailFailure(stderr.Bytes()); jailed {
-			// 牢房没建起来不是学生的错：判成 RE 会让他去查自己根本没跑起来的代码。
-			reportSandbox(false, note)
+		// 牢房没建成不是学生的错：判成 RE 会让他去查自己根本没跑起来的代码。判据只有一条
+		// ——jailer 在这一把的状态信道上留下的那句话（暗号对得上才算，见 jailBrokenFrom）。
+		if reason, broken := jailBrokenFrom(lim.jailStatus, ex.Exit); broken {
+			note := jailBrokenNote(reason)
+			reportJailBroken(note)
 			ex.Verdict, ex.Note = IE, note
 			return ex
 		}
