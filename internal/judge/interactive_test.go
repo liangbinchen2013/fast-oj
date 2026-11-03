@@ -66,7 +66,8 @@ func judgeInteractive(t *testing.T, tool Tool, itxSource, source string, cases [
 // buildAuxIn 在 root 里编一份判机自带的程序，返回它的命令行。
 func buildAuxIn(t *testing.T, root, kind, body string) []string {
 	t.Helper()
-	argv, err := BuildAux(Available(DefaultTools()), AuxProgram{Language: "cpp", Source: body}, root, kind)
+	requireRunnable(t)
+	argv, err := BuildAux(Available(DefaultTools()), AuxProgram{Language: "cpp", Source: body}, root, kind, nil)
 	if err != nil {
 		t.Fatalf("编%s失败：%v", auxKindName(kind), err)
 	}
@@ -181,7 +182,7 @@ func TestInteractiveUncompilableIsJudgeError(t *testing.T) {
 	requireToolchain(t)
 	_, err := BuildAux(Available(DefaultTools()),
 		AuxProgram{Language: "cpp", Source: "int main(){ not c++ }"},
-		filepath.Join(t.TempDir(), "aux"), AuxInteractor)
+		filepath.Join(t.TempDir(), "aux"), AuxInteractor, nil)
 	if err == nil || !strings.Contains(err.Error(), "交互器编不过") {
 		t.Fatalf("编不过的交互器 = %v，要一句点名交互器的错误", err)
 	}

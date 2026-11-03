@@ -18,6 +18,7 @@ func requirePython(t *testing.T) Tool {
 func judgePython(t *testing.T, source string, cases []Case) Report {
 	t.Helper()
 	tool := requirePython(t)
+	requireRunnable(t)
 	task := Task{
 		SubmissionID: 1, PID: "P1", Language: PythonLanguage, Source: source,
 		TimeLimitMS: 10_000, MemLimitKB: 256 << 10, Cases: cases,
@@ -110,13 +111,14 @@ print(len(os.listdir(d)), decimal.Decimal("1.5") + decimal.Decimal("0.5"),
 // 解释器里跑，多了源码就变成把 main.py 交给解释器两遍。
 func TestPythonCheckerBuildsAndJudges(t *testing.T) {
 	requirePython(t)
+	requireRunnable(t)
 	dir := t.TempDir()
 	src := `import sys
 data = [line.strip() for line in open(sys.argv[2], encoding="utf-8")]
 print("宽松判法：只要不是空")
 sys.exit(0 if data and data[0] else 1)`
 	argv, err := BuildAux(map[string]Tool{PythonLanguage: pythonTool},
-		AuxProgram{Language: PythonLanguage, Source: src}, dir, AuxChecker)
+		AuxProgram{Language: PythonLanguage, Source: src}, dir, AuxChecker, nil)
 	if err != nil {
 		t.Fatalf("Python 判题器建不起来：%v", err)
 	}
@@ -124,10 +126,10 @@ sys.exit(0 if data and data[0] else 1)`
 		t.Fatalf("命令行里没有护栏：%v", argv)
 	}
 	tc := Case{Input: []byte("1\n"), Expected: []byte("ignored\n")}
-	if v, note := checkWithSPJ(argv, dir, tc, []byte("7\n")); v != AC {
+	if v, note := checkWithSPJ(argv, dir, tc, []byte("7\n"), nil); v != AC {
 		t.Errorf("非空输出应当 AC：%s %s", v, note)
 	}
-	if v, _ := checkWithSPJ(argv, dir, tc, []byte("\n")); v != WA {
+	if v, _ := checkWithSPJ(argv, dir, tc, []byte("\n"), nil); v != WA {
 		t.Errorf("空输出应当 WA，得到 %s", v)
 	}
 }

@@ -67,11 +67,38 @@ type Report struct {
 }
 
 // CompileLimits are deliberately loose: a slow link step is not the submitter's
-// fault. The compiler is not the untrusted input here, but it still runs under a
-// scrubbed environment and a wide process cap rather than unsandboxed, since it is
-// the same execution path. TimeMS is a wall budget (limit + 50ms slack), so it
-// carries the multi-process compiler's startup overhead rather than one CPU bound.
+// fault. TimeMS is a wall budget (limit + 50ms slack), so it carries the
+// multi-process compiler's startup overhead rather than one CPU bound.
+//
+// 编译器不是不可信输入，但它**跑的是同一条执行路径**，所以它跟着一起 scrub 环境、一起
+// 限进程数、也一起降权（开了沙盒时它本来就在牢房里以那个 uid 跑 g++，这是既成事实）。
+// 用 compileLimitsFor 拿那份身份，别把 RunAs 漏掉——漏掉之后"root 判机 + 没沙盒"会在
+// 编译这一步撞上拒绝，而拒绝写得像判机坏了。
 var CompileLimits = Limits{TimeMS: 120_000, MemKB: 2 << 20, MaxProcs: 16}
+
+// compileLimitsFor 是"这一把要用哪个身份编"的那份 Limits。辅助程序（判题器、交互器）
+// 也走它：它们同样是别人写的代码，同样不该以 root 编译。
+func compileLimitsFor(drop *DropTo) Limits {
+	lim := CompileLimits
+	lim.RunAs = drop
+	return lim
+}
+
+// PrepareDir 建好这一次运行的目录，并在要降权时把它开成可进入的。
+//
+// setuid 之后的进程必须走得进自己干活的地方，否则每条提交都只会在 `fork/exec` 上撞一句
+// permission denied。开沙盒时这一步是 jail.Enter 做的（chroot 之前 chmod 0777）；没沙盒
+// 却照样降权时没人做，所以要在这里补上。放宽的只有这一次提交自己那一层，判完就删；再往上
+// 的 `-dir` 归部署方负责（容器那份 compose 把它挂在 mode=1777 的 tmpfs 上）。
+func PrepareDir(dir string, drop *DropTo) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if drop == nil || Jailed() {
+		return nil
+	}
+	return os.Chmod(dir, 0o777)
+}
 
 // maxDetail keeps judge-side text out of the database from growing unbounded.
 const maxDetail = 4 << 10
@@ -107,19 +134,9 @@ func Judge(task Task, tool Tool, dir string, drop *DropTo, onProgress Progress) 
 		rep.Detail = "problem " + task.PID + " has no test cases"
 		return rep
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := PrepareDir(dir, drop); err != nil {
 		rep.Detail = "workdir: " + err.Error()
 		return rep
-	}
-	if !Jailed() && drop != nil {
-		// 牢房在建的时候会把这个目录开成 0777（jail.Enter 里那一步），因为它随后要降权。
-		// 没牢房却照样降权时同理：setuid 之后的进程连自己的目录都进不去，每条提交只会撞
-		// 一句 `fork/exec ...: permission denied`。判完就删，这里放宽的是这一次提交自己住的那层。
-		// （再往上的 `-dir` 仍归部署方负责：容器把它挂在 mode=1777 的 tmpfs 上。）
-		if err := os.Chmod(dir, 0o777); err != nil {
-			rep.Detail = "workdir mode: " + err.Error()
-			return rep
-		}
 	}
 
 	source := filepath.Join(dir, tool.SourceFile)
@@ -134,7 +151,7 @@ func Judge(task Task, tool Tool, dir string, drop *DropTo, onProgress Progress) 
 	}
 
 	if tool.Compiles() {
-		build := Run(tool.CompileArgs(dir), dir, nil, CompileLimits)
+		build := Run(tool.CompileArgs(dir), dir, nil, compileLimitsFor(drop))
 		if build.Exit != 0 {
 			rep.Verdict = CE
 			rep.Detail = clipText(string(build.Stderr), maxDetail)
@@ -188,7 +205,7 @@ func Judge(task Task, tool Tool, dir string, drop *DropTo, onProgress Progress) 
 			if v == AC {
 				switch {
 				case len(task.SPJ) > 0:
-					v, note = checkWithSPJ(task.SPJ, dir, tc, ex.Stdout)
+					v, note = checkWithSPJ(task.SPJ, dir, tc, ex.Stdout, drop)
 				case !OutputsMatch(ex.Stdout, tc.Expected):
 					v, note = WA, diffExcerpt(ex.Stdout, tc.Expected)
 				}

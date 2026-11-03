@@ -28,6 +28,7 @@ func judgeSource(t *testing.T, tool Tool, source string, cases []Case, timeMS, m
 
 func judgeSourceAs(t *testing.T, tool Tool, source string, cases []Case, timeMS, memKB int, drop *DropTo) Report {
 	t.Helper()
+	requireRunnable(t)
 	task := Task{
 		SubmissionID: 1, PID: "P1", Language: "cpp", Source: source,
 		TimeLimitMS: timeMS, MemLimitKB: memKB, Cases: cases,
@@ -121,6 +122,7 @@ func TestJudgeDetectsWrongAnswer(t *testing.T) {
 // hands each row over the moment it exists, in case order.
 func TestProgressReportsEachCaseAsItFinishes(t *testing.T) {
 	tool := requireToolchain(t)
+	requireRunnable(t)
 	var seen []RunRow
 	rep := Judge(Task{SubmissionID: 1, PID: "P1", Language: "cpp", Source: sumSource,
 		TimeLimitMS: 2000, MemLimitKB: 262144, Cases: sumCases()},

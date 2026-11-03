@@ -323,7 +323,7 @@ func (a *Agent) ProcessOnce(ctx context.Context) (bool, error) {
 	}
 
 	dir := filepath.Join(a.cfg.Dir, strconv.FormatInt(task.SubmissionID, 10))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := judge.PrepareDir(dir, a.cfg.RunAs); err != nil {
 		rep := judge.Report{Verdict: judge.IE, TimeMS: -1, MemKB: -1, Detail: "workdir: " + err.Error()}
 		return true, a.PostResult(ctx, task.SubmissionID, rep)
 	}
@@ -337,7 +337,7 @@ func (a *Agent) ProcessOnce(ctx context.Context) (bool, error) {
 	if task.Checker != nil {
 		built, err := judge.BuildAux(a.cfg.Tools, judge.AuxProgram{
 			Language: task.Checker.Language, Source: task.Checker.Source,
-		}, dir, judge.AuxChecker)
+		}, dir, judge.AuxChecker, a.cfg.RunAs)
 		if err != nil {
 			return true, a.postJudgeError(ctx, task.SubmissionID, err)
 		}
@@ -346,7 +346,7 @@ func (a *Agent) ProcessOnce(ctx context.Context) (bool, error) {
 	if task.Interactor != nil {
 		built, err := judge.BuildAux(a.cfg.Tools, judge.AuxProgram{
 			Language: task.Interactor.Language, Source: task.Interactor.Source,
-		}, dir, judge.AuxInteractor)
+		}, dir, judge.AuxInteractor, a.cfg.RunAs)
 		if err != nil {
 			return true, a.postJudgeError(ctx, task.SubmissionID, err)
 		}

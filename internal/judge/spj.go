@@ -26,7 +26,17 @@ import (
 // auxLimits 是给判题器与交互器的预算。它与学生题目的时限无关：太紧会让一个写得慢的
 // 判题器把正确答案判成判机故障，太松则没人管着作者那段在判机上跑的代码。
 // 十秒与 512MB 取的是"判一份输出用得着这么多吗"和"别把机器拖死"之间的中。
+//
+// 这两份程序也是**别人写的代码**，所以它们跟学生提交同一个身份跑（RunAs 由调用方补上，
+// 见 auxLimitsFor）：开了沙盒时牢房本来就降权，没沙盒时不补这一刀就是"作者以 root 跑"。
 var auxLimits = Limits{TimeMS: 10_000, MemKB: 512 << 10, MaxProcs: 8}
+
+// auxLimitsFor 是那两份辅助程序的预算加上"跟提交一起降权"的那份身份。
+func auxLimitsFor(drop *DropTo) Limits {
+	lim := auxLimits
+	lim.RunAs = drop
+	return lim
+}
 
 // AuxProgram 是题目自带的一份判机程序（判题器或交互器）。
 type AuxProgram struct {
@@ -54,13 +64,13 @@ func auxKindName(name string) string {
 //
 // 返回的是 argv 而不是一个路径，因为解释型判题器的命令行是 <解释器> <源码>：拼成字符串
 // 再拆回去，路径里一个空格就把命令行切坏了。
-func BuildAux(tools map[string]Tool, prog AuxProgram, root, name string) ([]string, error) {
+func BuildAux(tools map[string]Tool, prog AuxProgram, root, name string, drop *DropTo) ([]string, error) {
 	tool, ok := tools[strings.ToLower(strings.TrimSpace(prog.Language))]
 	if !ok {
 		return nil, fmt.Errorf("这台判机没有 %s 的工具链，编不了这道题的%s", prog.Language, auxKindName(name))
 	}
 	dir := filepath.Join(root, name)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := PrepareDir(dir, drop); err != nil {
 		return nil, err
 	}
 	source := filepath.Join(dir, tool.SourceFile)
@@ -75,7 +85,7 @@ func BuildAux(tools map[string]Tool, prog AuxProgram, root, name string) ([]stri
 		}
 		return tool.RunArgs(dir), nil
 	}
-	build := Run(tool.CompileArgs(dir), dir, nil, CompileLimits)
+	build := Run(tool.CompileArgs(dir), dir, nil, compileLimitsFor(drop))
 	if build.Verdict == IE {
 		// 编译器不在、沙盒没建起来：说清楚是判机的问题，别把作者的 bug 算成学生的。
 		return nil, fmt.Errorf("%s编译时判机出错了：%s", auxKindName(name),
@@ -97,7 +107,10 @@ func BuildAux(tools map[string]Tool, prog AuxProgram, root, name string) ([]stri
 }
 
 // checkWithSPJ 让判题器对一次运行下判定，返回判定与给人看的那句话。
-func checkWithSPJ(argv []string, dir string, tc Case, got []byte) (Verdict, string) {
+//
+// drop 是这次提交降到的那个身份：判题器也是别人写的代码，没理由以判机自己的（可能就是
+// root）身份跑。
+func checkWithSPJ(argv []string, dir string, tc Case, got []byte, drop *DropTo) (Verdict, string) {
 	// 三个文件写在工作目录里：学生程序此时已经跑完，所以它读不到这些——反过来（判题前
 	// 就把答案放进去）才是漏答案。
 	paths := make([]string, 0, 3)
@@ -108,7 +121,7 @@ func checkWithSPJ(argv []string, dir string, tc Case, got []byte) (Verdict, stri
 		}
 		paths = append(paths, p)
 	}
-	ex := Run(append(append([]string{}, argv...), paths...), dir, nil, auxLimits)
+	ex := Run(append(append([]string{}, argv...), paths...), dir, nil, auxLimitsFor(drop))
 	comment := clipText(strings.TrimSpace(string(ex.Stdout)), maxDetail)
 	switch {
 	case ex.Verdict == IE:

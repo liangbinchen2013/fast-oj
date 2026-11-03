@@ -23,17 +23,7 @@ func TestMain(m *testing.M) {
 func jailOn(t *testing.T) {
 	t.Helper()
 	requireToolchain(t)
-	uid, gid := uint32(65534), uint32(65534)
-	if os.Getuid() == int(uid) { // 判机本身就是 nobody：换一个没映射的号
-		uid, gid = 65533, 65533
-	}
-	SetSandbox("/proc/self/exe", jail.On, os.Getuid() != 0, uid, gid)
-	t.Cleanup(func() { SetSandbox("", jail.Off, false, 0, 0) })
-	note, err := ProbeSandbox(filepath.Join(t.TempDir(), "probe"))
-	if err != nil {
-		t.Skipf("这台机器开不了沙盒：%v", err)
-	}
-	t.Logf("沙盒：%s", note)
+	enableJailForTests(t)
 }
 
 // build 在牢房里用 g++ 编一个程序：编译这一步也走同一条路，所以它同时验证了

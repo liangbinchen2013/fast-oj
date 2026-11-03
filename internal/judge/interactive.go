@@ -457,7 +457,7 @@ func runInteractive(interactor, userArgv []string, dir string, tc Case, lim Limi
 		paths = append(paths, p)
 	}
 	d := RunDuo(userArgv, append(append([]string{}, interactor...), paths...), dir,
-		lim, Limits{MemKB: auxLimits.MemKB, MaxProcs: auxLimits.MaxProcs})
+		lim, Limits{MemKB: auxLimits.MemKB, MaxProcs: auxLimits.MaxProcs, RunAs: lim.RunAs})
 	// 转写落在交互器的第二个参数上：出争议时"学生到底答了什么"只有这一份证据。
 	if err := writeRunFile(paths[1], d.User.Stdout); err != nil {
 		d.User.Note = orText(d.User.Note, "对话记录写不进工作目录: "+err.Error())

@@ -32,7 +32,7 @@ func checker(code string) string {
 func buildChecker(t *testing.T, root, body string) []string {
 	t.Helper()
 	argv, err := BuildAux(Available(DefaultTools()), AuxProgram{Language: "cpp", Source: body},
-		root, AuxChecker)
+		root, AuxChecker, nil)
 	if err != nil {
 		t.Fatalf("编判题器失败：%v", err)
 	}
@@ -42,6 +42,7 @@ func buildChecker(t *testing.T, root, body string) []string {
 // judgeWithSPJ 按生产的样子跑一次判题：工作目录先建好，判题器编在它里面。
 func judgeWithSPJ(t *testing.T, tool Tool, checkerSource, source string, cases []Case) Report {
 	t.Helper()
+	requireRunnable(t)
 	dir := filepath.Join(t.TempDir(), "work")
 	return Judge(Task{
 		SubmissionID: 1, PID: "P1", Language: "cpp", Source: source,
@@ -114,6 +115,7 @@ int main(){ printf("1\n"); }`
 // 而且错得很安静。
 func TestSPJPassesInputOutputAnswerInThatOrder(t *testing.T) {
 	requireToolchain(t)
+	requireRunnable(t)
 	dir := t.TempDir()
 	argv := buildChecker(t, dir, checker("0"))
 	for name, body := range map[string]string{
@@ -138,7 +140,7 @@ func TestBuildAuxReportsTheAuthorsBug(t *testing.T) {
 	requireToolchain(t)
 	tools := Available(DefaultTools())
 	_, err := BuildAux(tools, AuxProgram{Language: "cpp", Source: "int main(){ this is not c++ }"},
-		filepath.Join(t.TempDir(), "aux3"), AuxChecker)
+		filepath.Join(t.TempDir(), "aux3"), AuxChecker, nil)
 	if err == nil {
 		t.Fatal("编不过的判题器竟然返回了成功")
 	}
@@ -146,7 +148,7 @@ func TestBuildAuxReportsTheAuthorsBug(t *testing.T) {
 		t.Errorf("错误的话没点名是判题器：%q", err.Error())
 	}
 	if _, err := BuildAux(tools, AuxProgram{Language: "pas", Source: "x"},
-		filepath.Join(t.TempDir(), "aux4"), AuxChecker); err == nil ||
+		filepath.Join(t.TempDir(), "aux4"), AuxChecker, nil); err == nil ||
 		!strings.Contains(err.Error(), "工具链") {
 		t.Errorf("没有的工具链应当直说：%v", err)
 	}
