@@ -54,10 +54,14 @@ func TestForgedJailStderrChangesNothing(t *testing.T) {
 		t.Fatalf("一行假输出关掉了牢房：Jailed=%v 说明=%q", Jailed(), SandboxNote())
 	}
 
-	// 下一条仍然在牢房里、仍然是 nobody。
-	uid := judgeSource(t, tool, getuidSource, threeCase(), 2000, 262144)
+	// 下一条仍然在牢房里、仍然是那个没被映射的号。身份要当场上验，不能只靠"状态没变"：
+	// 期望输出就是牢房里的那个 uid，判成 AC 才说明提交既在牢房里也没被换成 root。
+	uidCase := []Case{{Name: "1", Ordinal: 1, Score: 100, Input: []byte("1 2\n"),
+		Expected: []byte(strconv.Itoa(int(sandbox.uid)) + "\n")}}
+	uid := judgeSource(t, tool, getuidSource, uidCase, 2000, 262144)
 	if uid.Verdict != AC {
-		t.Fatalf("假输出之后的那条判成 %s（%s）：牢房或身份变了", uid.Verdict, uid.Detail)
+		t.Fatalf("假输出之后的那条判成 %s（%s），想要 AC：那一格打印的 uid 才是这次要的读数",
+			uid.Verdict, uid.Detail)
 	}
 }
 
@@ -89,7 +93,11 @@ func TestRealJailFailureIsReportedOnTheChannel(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 宿主上存在、牢房里不存在：jailer 会在"牢房里找不到它"那一步失败。
-	hostOnly := filepath.Join(t.TempDir(), "bin", "prog")
+	hostBin := filepath.Join(t.TempDir(), "bin")
+	if err := os.MkdirAll(hostBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hostOnly := filepath.Join(hostBin, "prog")
 	if err := os.WriteFile(hostOnly, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -128,39 +136,48 @@ func TestProgramExiting70IsNotAJailFailure(t *testing.T) {
 	}
 }
 
-// 没有牢房时，身份这一层必须由判机自己补上：把 root 交给学生的代码永远不是可接受的默认值。
-func TestUnjailedRunNeverKeepsRoot(t *testing.T) {
-	if _, err := exec.LookPath("g++"); err != nil {
-		t.Skip("没有 g++")
+// root 判机 + 没沙盒 + 没给 -run-as 时，答案是**不跑**：把 root 交给提交的代码永远不是
+// 可接受的默认值，而"兜底降到 nobody"在生产这台机上会撞在工作目录的祖先上（0750），
+// 变成每条提交一句看不懂的 EACCES。非 root 判机（容器、run.sh 那个专用账号）不受影响。
+func TestRootJudgeWithoutSandboxRefusesToRun(t *testing.T) {
+	idPath, err := exec.LookPath("id")
+	if err != nil {
+		t.Skip("这台机器上没有 id 可用")
 	}
 	restoreSandboxFor(t)
 	SetSandbox("", jail.Off, false, 0, 0) // 故意不带牢房：这一条测的正是少了它还剩什么
 
-	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o777); err != nil { // 降权之后还要能在里面编译
+	// 降权之后还得能走进这个目录：用 /tmp 下面自己建的一层（/tmp 本身是 1777），
+	// 而不是 t.TempDir()——它的祖先是 0700 的测试根目录，nobody 进不去，测的就不是这件事了。
+	dir, err := os.MkdirTemp("", "oj-drop-check")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "main.cpp"), []byte(getuidSource), 0o644); err != nil {
+	defer os.RemoveAll(dir)
+	if err := os.Chmod(dir, 0o777); err != nil {
 		t.Fatal(err)
 	}
-	if out := Run([]string{"g++", "-O2", "-std=c++17", "-o", "main", "main.cpp"}, dir, nil, CompileLimits); out.Exit != 0 {
-		t.Fatalf("编译失败：%q", out.Stderr)
-	}
-	ex := Run([]string{filepath.Join(dir, "main")}, dir, nil, Limits{TimeMS: 2000, MemKB: 262144})
-	uid := strings.TrimSpace(string(ex.Stdout))
-	if uid == "" {
-		t.Fatalf("程序没跑出身份：%+v", ex)
-	}
-	if os.Getuid() == 0 {
-		if uid != strconv.Itoa(nobodyUID) {
-			t.Errorf("判机是 root、没牢房也没给 -run-as：提交以 uid %s 跑了，想要 %d", uid, nobodyUID)
+	ex := Run([]string{idPath, "-u"}, dir, nil, Limits{TimeMS: 2000, MemKB: 262144})
+	if os.Getuid() != 0 {
+		// 判机自己不是 root：照旧以它自己的身份跑，这条不许把普通形态也拦下来。
+		if got := strings.TrimSpace(string(ex.Stdout)); got != strconv.Itoa(os.Getuid()) {
+			t.Errorf("非 root 判机被改变了行为：判定 %s、输出 %q、说明 %q", ex.Verdict, got, ex.Note)
 		}
 		return
 	}
-	// 判机本身不是 root（容器或专用账号）时照旧以自己的身份跑——那是调用方选的形态，
-	// 这里只要求它别把人家的 root 端出来。
-	if uid != strconv.Itoa(os.Getuid()) {
-		t.Errorf("非 root 判机改变了提交的身份：uid %s，判机自己 %d", uid, os.Getuid())
+	if ex.Verdict != IE {
+		t.Fatalf("root + 没沙盒 判成 %s（%q），想要拒绝跑", ex.Verdict, ex.Note)
+	}
+	if len(ex.Stdout) != 0 {
+		t.Errorf("拒绝之前已经把程序跑起来了，输出 %q", ex.Stdout)
+	}
+	if !strings.Contains(ex.Note, "不敢把 root 交给提交") {
+		t.Errorf("拒绝得不够明白：%q", ex.Note)
+	}
+	// 给了 -run-as 就照办：这是容器与"root 起步、提交降到 nobody"那两种形态的写法。
+	ex2 := Run([]string{idPath, "-u"}, dir, nil, Limits{TimeMS: 2000, MemKB: 262144, RunAs: &DropTo{UID: 65534, GID: 65534}})
+	if got := strings.TrimSpace(string(ex2.Stdout)); got != "65534" {
+		t.Errorf("显式 -run-as 的那一条以 uid %q 跑了（判定 %s，说明 %q），想要 65534", got, ex2.Verdict, ex2.Note)
 	}
 }
 

@@ -40,10 +40,18 @@ func (g *plainGuard) Configure(cmd *exec.Cmd) error {
 		Setpgid: true, // so Kill takes the whole tree, not just the leader
 	}
 	if _, jailed := jailFor(g.lim); !jailed {
-		// 没有牢房，身份这一层就得由判机自己补。以前只有"调用方给了 -run-as"才降，于是
-		// 判机以 root 跑又没写 -run-as 的那台机器上，牢房一旦关掉（无论是内核开不了，还是
-		// 被人用一行假输出关掉），学生的代码就直接在宿主上以 root 跑。
-		if drop := g.unjailedIdentity(); drop != nil {
+		// 没有牢房，身份这一层就得由判机自己补。判机是 root 而没人告诉它要降到谁时，
+		// 答案是**拒绝跑**，不是"就按 root 跑吧"：2026-11-01 那条伪造一行 stderr 就能
+		// 关掉牢房的漏洞，撞出来的正是这个组合（ECS 上实测：关掉之后下一条提交打印
+		// getuid() 得到 0）。
+		if g.lim.RunAs == nil && os.Getuid() == 0 {
+			return errRootWithoutSandbox
+		}
+		if drop := g.lim.RunAs; drop != nil {
+			// Dropping the uid also means the program cannot read anything the judge
+			// owns, and RLIMIT-style per-user budgets stop competing with the judge.
+			// Inside a jail the identity is dropped by the jailer instead, after the
+			// mounts and chroot are done.
 			cmd.SysProcAttr.Credential = &syscall.Credential{
 				Uid: drop.UID, Gid: drop.GID, NoSetGroups: true,
 			}
@@ -52,24 +60,16 @@ func (g *plainGuard) Configure(cmd *exec.Cmd) error {
 	return applyJail(cmd, g.lim)
 }
 
-// nobodyUID 是"在宿主上什么都不是"的那个号：内核兜底与容器都按它算。
-const nobodyUID = 65534
-
-// unjailedIdentity 回答"这一把没有牢房，那它以谁的身份跑"。
+// errRootWithoutSandbox 是"root 判机 + 没沙盒 + 没给 -run-as"这一组合的拒绝。
 //
-// 调用方指定了身份就用它；没指定时，判机不是 root 就照旧以自己的身份跑（容器里、或专用
-// 账号下跑的判机本来就没多少可降的），判机**是** root 则兜底压到 nobody——把 root 交给
-// 学生代码永远不是可接受的默认值，哪怕"牢房应该是开着的"。
-func (g *plainGuard) unjailedIdentity() *DropTo {
-	if g.lim.RunAs != nil {
-		return g.lim.RunAs
-	}
-	if os.Getuid() != 0 {
-		// 身份已经由启动判机的那个人定好了；判机也降不动别人的账号。
-		return nil
-	}
-	return &DropTo{UID: nobodyUID, GID: nobodyUID}
-}
+// 为什么不改成"兜底降到 nobody"：那需要提交能走进判机给它准备的工作目录，而生产上那个
+// 目录的祖先 (/var/lib/fast-oj 是 0750) 是**故意**不给别人进的——实测 fork/exec 直接
+// EACCES，每条提交都成判机故障，还说不清为什么。两种已知的部署形态本来都不该落到这里：
+// 容器判机显式写着 -run-as 65534:65534 且 /work 是 1777 的 tmpfs，root 起步的裸机判机
+// 开的是沙盒。真要不开沙盒，就用一个普通账号跑判机（run.sh 就是这么做的）。
+var errRootWithoutSandbox = errors.New(
+	"判机以 root 跑、没有沙盒、也没有 -run-as：不敢把 root 交给提交的代码。" +
+		"要么开沙盒（-sandbox=on 或 auto），要么用 -run-as uid:gid 指定一个在宿主上什么都不是的号")
 
 func (g *plainGuard) Attach(p *os.Process) error {
 	g.proc = p

@@ -1127,7 +1127,7 @@ exec 之间插东西，所以 `setrlimit`、`mount`、`chroot` 这些必须由�
 | 进程 | `CLONE_NEWIPC`/`CLONE_NEWUTS` + `RLIMIT_NPROC` | fork 炸弹被内核掐住（实测 400 次 fork 在 8 的额度下被判 TLE 并整组杀掉） |
 | 时间 | 判机墙上时钟 + 整组击杀，另有 `RLIMIT_CPU` 宽两秒兜底 | 死循环仍是 `TLE`，且给出实测值 |
 | 内存 | 判机实测 `rusage` + `/proc` 轮询熔断，`RLIMIT_AS` 只留 512 MB 余量 | 吃 300 MB 而限 64 MB 仍是 **`MLE`**，不会被抢先打成 `RE`；连加载都放不下的大镜像也判 `MLE`（见[判定口径](#判定口径judgerun)） |
-| 身份 | root 判机降到 `-run-as` 的 uid；非 root 判机走非特权 user namespace，最后落到一个**未映射**的 uid；牢房没开着且没给 `-run-as` 时兜底压到 `nobody(65534)` | 宿主看到的是 nobody，判机的库、令牌、别人的提交都读不到；**root 永远不会成为提交的身份** |
+| 身份 | root 判机降到 `-run-as` 的 uid；非 root 判机走非特权 user namespace，最后落到一个**未映射**的 uid；root 判机若既没沙盒又没 `-run-as`，**拒绝跑提交** | 宿主看到的是 nobody，判机的库、令牌、别人的提交都读不到；**root 永远不会成为提交的身份** |
 
 `-sandbox=on` 是硬要求：启动时真建一次牢房，建不出来判机就**拒绝启动**（`systemctl status fast-judge` 会看到原因），不会悄悄按不隔离的路子重跑。
 `-sandbox=auto`（默认）反过来：**启动时**开不了就**不再尝试**，在启动日志与 `/judges` 上写明"未隔离"，判题照常。以前 auto 是"开不了也每条都试一次"，于是每台开不了命名空间的机器都会把每条工单判成 `IE`——那条已经修掉了。注意"判题照常"只管启动这一次结论：跑到一半牢房坏了是停下来，不是继续（见[牢房坏了走哪条信道说](#牢房坏了走哪条信道说-jailstatus)）。
@@ -1177,10 +1177,13 @@ exec 之间插东西，所以 `setrlimit`、`mount`、`chroot` 这些必须由�
 把一次中途失败当成"这台不隔离"，从此安静地裸跑下去——那等于把一条已经确认成立的安全前提
 悄悄撤掉。
 
-**判机是 root 时，没有牢房也绝不把 root 交给提交**。`-run-as` 没写、牢房又没开着时，判机
-兜底把提交压到 `nobody(65534)`（`TestUnjailedRunNeverKeepsRoot`：把沙盒关掉再跑一次
-`getuid()`，输出必须是 65534 而不是 0）。判机本身不是 root（容器、专用账号）时保持原样，
-因为那是调用方选的形态，能降的本来就只有这些。
+**判机是 root、既没牢房又没 `-run-as` 时，拒绝跑提交**，而不是"就按 root 跑吧"。把 root
+交给学生代码永远不是可接受的默认值；这里也没选"兜底降到 nobody"——那要求提交能走进判机给它
+准备的工作目录，而生产上那个目录的祖先（`/var/lib/fast-oj` 是 `0750`）正是**故意**不给别人
+进的，实测 `fork/exec` 直接 `EACCES`，等于每条提交换来一句看不懂的判机故障。所以这条是一句
+明白的拒绝，已知的两种形态各归各位：容器判机显式写 `-run-as 65534:65534`（`/work` 是
+`mode=1777` 的 tmpfs，降权后进得去），root 起步的裸机判机开沙盒；判机不是 root 时行为不变
+（`TestRootJudgeWithoutSandboxRefusesToRun` 把这三种都钉住了）。
 
 判机容器要多给三个能力：`SYS_ADMIN` + `NET_ADMIN`（开 mount/network 命名空间）、
 `SYS_PTRACE`（读降权子进程的 `/proc/<pid>/statm`，内存熔断靠它）。Docker **默认 seccomp
@@ -1427,7 +1430,7 @@ data/
 | `-poll` | 500ms | 空队列轮询间隔 |
 | `-backoff` | 3s | 出错后的退避 |
 | `-tools` | 全部可用 | 只申报指定语言 |
-| `-run-as uid:gid` | 空 | root 判机把提交降到这个 uid（`FASTOJ_JUDGE_RUN_AS`）；Windows 上直接拒绝启动。开了沙盒时它是牢房外的第二道身份；**没开沙盒又留空时，判机是 root 就兜底压到 `nobody(65534)`**——提交永远拿不到 root |
+| `-run-as uid:gid` | 空 | root 判机把提交降到这个 uid（`FASTOJ_JUDGE_RUN_AS`）；Windows 上直接拒绝启动。开了沙盒时它是牢房外的第二道身份；**没开沙盒又留空、而判机是 root 时，判机拒绝跑提交**（不敢把 root 交给学生代码，也不再给一句看不懂的 `EACCES`） |
 | `-sandbox` | `auto` | 判题沙盒：`auto` 能开就开、开不了就在 `/judges` 标注；`on` 建不出牢房就不判（报 `IE`）；`off` 明确不隔离（`FASTOJ_JUDGE_SANDBOX`） |
 | `-once` | — | 最多判一条就退出 |
 
