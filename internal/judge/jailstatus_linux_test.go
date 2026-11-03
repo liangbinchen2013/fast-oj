@@ -5,7 +5,6 @@ package judge
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,42 +80,63 @@ func TestCompileErrorCannotFakeAJailFailure(t *testing.T) {
 	}
 }
 
-// 反过来：真的建不起牢房时，jailer 在信道上留的话必须被读到，而且判机从此不再裸跑。
-// 这里的"真失败"是把一个牢房里找不到的程序交给它——失败发生在 jailer 自己身上。
-func TestRealJailFailureIsReportedOnTheChannel(t *testing.T) {
+// 真的建不起牢房时，判机必须把那句话读回来并停下领单。这里钉的是两处接线，都不依赖
+// 目录布局（早先一版靠"把一个牢房里没有的程序交给 jailer"触发失败，而 jailer 把宿主路径
+// 换成牢房路径时用了 filepath.Rel，临时目录的编号一变，那条路径可能反而解析得到——同一份
+// 代码单独跑绿、全量跑红，那种测试不配当回归闸）：
+//
+//   - applyJail 有没有把这一把的路径与暗号交给 jailer（没有就没有任何信道）；
+//   - jailBrokenFrom 三种读数：写着暗号的失败声明、只有 exec 记号 + 退出码 70、什么都没有。
+//
+// 真 jailer 真失败时确实会写下那行，由 internal/jail 的 TestJailerReportsARealFailure 覆盖；
+// 两端合起来就是完整链路。
+func TestJailStatusIsWiredIntoTheJailer(t *testing.T) {
 	jailOn(t)
-	requireToolchain(t)
 	restoreSandboxFor(t)
 
-	dir := filepath.Join(t.TempDir(), "work")
-	if err := os.MkdirAll(dir, 0o777); err != nil {
+	st, err := newJailStatus(Limits{TimeMS: 1000})
+	if err != nil {
 		t.Fatal(err)
 	}
-	// 宿主上存在、牢房里不存在：jailer 会在"牢房里找不到它"那一步失败。
-	hostBin := filepath.Join(t.TempDir(), "bin")
-	if err := os.MkdirAll(hostBin, 0o755); err != nil {
+	defer st.Remove()
+	lim := Limits{TimeMS: 1000, MemKB: 65536, jailStatus: st}
+
+	cmd := exec.Command("/bin/true")
+	cmd.Dir = t.TempDir()
+	if err := applyJail(cmd, lim); err != nil {
 		t.Fatal(err)
 	}
-	hostOnly := filepath.Join(hostBin, "prog")
-	if err := os.WriteFile(hostOnly, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+	wrapped := cmd.Args[1]
+	if !strings.Contains(wrapped, `"status":"`+st.Path()+`"`) ||
+		!strings.Contains(wrapped, `"nonce":"`+st.Nonce()+`"`) {
+		t.Fatalf("jailer 没拿到这一把的信道：%s", wrapped)
+	}
+
+	// 三种读数。第三种（什么都没写）配合退出码 70 也算失败，那是"jailer 死了却没写成"，
+	// 宁可比真话晚一步，也不把没牢房的运行当成正常判完。
+	written, err := jail.NewStatus()
+	if err != nil {
 		t.Fatal(err)
 	}
-	ex := Run([]string{hostOnly}, dir, nil, Limits{TimeMS: 2000, MemKB: 262144})
-	if ex.Verdict != IE {
-		t.Fatalf("真建不起牢房时判成 %s（%q），想要判机故障", ex.Verdict, ex.Note)
+	defer written.Remove()
+	f, err := os.OpenFile(written.Path(), os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(ex.Note, "沙盒未能建立") || !strings.Contains(ex.Note, "找不到") {
-		t.Errorf("判机信息没把原因从信道上带回来：%q", ex.Note)
+	// 暗号是从 spec 里拿到的那一份：这里就是这一把自己的暗号，等价于 jailer 写的话。
+	// 格式与 jail 包里那一份一致：`暗号\x1fF\x1f原因`。
+	if _, err := f.WriteString(written.Nonce() + "\x1fF\x1fmount bind 失败\n"); err != nil {
+		t.Fatal(err)
 	}
-	if !SandboxBroken() {
-		t.Error("可信信道报了失败，判机却没把自己标记成坏了")
+	f.Close()
+	if reason, broken := jailBrokenFrom(written, 70); !broken || !strings.Contains(reason, "mount bind") {
+		t.Errorf("jailer 写的失败声明没读到：%q / %v", reason, broken)
 	}
-	if Jailed() {
-		t.Error("坏了之后还宣称有牢房")
+	if reason, broken := jailBrokenFrom(nil, 70); broken {
+		t.Errorf("这一把没有信道却判成牢房坏了：%q", reason)
 	}
-	// 停下是靠主循环问 SandboxBroken 实现的，这里核对它确实可读得到原因。
-	if !strings.Contains(SandboxNote(), "找不到") {
-		t.Errorf("说明里没留下线索：%q", SandboxNote())
+	if _, broken := jailBrokenFrom(st, 0); broken {
+		t.Error("牢房建得好好的（退出码 0）却报坏了")
 	}
 }
 
