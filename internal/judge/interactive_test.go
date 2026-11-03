@@ -180,6 +180,7 @@ int main(){ long n; scanf("%ld",&n); printf("%ld\n", n+1); printf("thanks\n"); f
 // 退回逐字节比较（那才是真的悄悄改了判定口径）。
 func TestInteractiveUncompilableIsJudgeError(t *testing.T) {
 	requireToolchain(t)
+	requireRunnable(t) // 同 TestBuildAuxReportsTheAuthorsBug：要的是编译器真的开口说话
 	_, err := BuildAux(Available(DefaultTools()),
 		AuxProgram{Language: "cpp", Source: "int main(){ not c++ }"},
 		filepath.Join(t.TempDir(), "aux"), AuxInteractor, nil)

@@ -54,8 +54,15 @@ func TestJailStillJudgesNormally(t *testing.T) {
 }
 
 // 关掉沙盒时结果必须一模一样，否则"开不开沙盒"会改变判定口径。
+//
+// root 判机上跳过：那条形态现在按设计不存在——root + 没沙盒 + 没 -run-as 是**拒绝跑提交**
+// （见 plainGuard.Configure），拿不到"关掉沙盒的那一份结果"来比。非 root 的判机（容器里的
+// 专用账号、开发机）两边都照跑，而那正是生产中真的会关掉沙盒的形态。
 func TestJailOffKeepsTheSameVerdict(t *testing.T) {
 	requireToolchain(t)
+	if os.Getuid() == 0 {
+		t.Skip("root 判机关掉沙盒时按设计不跑提交，这里比的两种形态在 root 上只剩一种")
+	}
 	dir := t.TempDir()
 	build(t, dir, "main.cpp", "main")
 	ex := Run([]string{filepath.Join(dir, "main")}, dir, nil, Limits{TimeMS: 2000, MemKB: 65536})

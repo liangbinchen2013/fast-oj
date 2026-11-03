@@ -138,6 +138,7 @@ func TestSPJPassesInputOutputAnswerInThatOrder(t *testing.T) {
 // 一行代码都没错，让他吃一个 Compile Error 是最难查的冤枉。
 func TestBuildAuxReportsTheAuthorsBug(t *testing.T) {
 	requireToolchain(t)
+	requireRunnable(t) // 这条要的是"编译器真的跑了并说编不过"，root 判机没沙盒时会在编译前就被拒
 	tools := Available(DefaultTools())
 	_, err := BuildAux(tools, AuxProgram{Language: "cpp", Source: "int main(){ this is not c++ }"},
 		filepath.Join(t.TempDir(), "aux3"), AuxChecker, nil)
