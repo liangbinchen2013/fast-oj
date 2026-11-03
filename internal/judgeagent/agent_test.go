@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -47,9 +48,27 @@ func newEnv(t *testing.T) *env {
 	}
 	handler := api.New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)), db).Handler()
 	srv := httptest.NewServer(handler)
+	// 判机是 root 时按生产的形态把提交降权：root + 没沙盒 + 没给 -run-as 现在是**拒绝跑**
+	// （不敢把 root 交给学生代码），而这些用例要测的是整条判题链路。降权之后进程还得走得
+	// 进这次的工作目录，所以工作根目录放在 /tmp 下并开成 1777，而不是 t.TempDir() 那棵
+	// 0700 的私有树——容器判机那份 compose 也是这么给的（tmpfs mode=1777）。
+	agentDir := filepath.Join(t.TempDir(), "work")
+	var runAs *judge.DropTo
+	if os.Getuid() == 0 {
+		root, err := os.MkdirTemp("", "fast-oj-agent-work")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.RemoveAll(root) })
+		if err := os.Chmod(root, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		agentDir = filepath.Join(root, "work")
+		runAs = &judge.DropTo{UID: 65534, GID: 65534}
+	}
 	agent, err := New(Config{
 		Server: srv.URL, Token: cfg.JudgeToken, Name: "e2e-box",
-		Dir: filepath.Join(t.TempDir(), "work"), Logf: t.Logf,
+		Dir: agentDir, Logf: t.Logf, RunAs: runAs,
 	})
 	if err != nil {
 		t.Fatal(err)

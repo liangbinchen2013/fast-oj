@@ -111,6 +111,16 @@ func Judge(task Task, tool Tool, dir string, drop *DropTo, onProgress Progress) 
 		rep.Detail = "workdir: " + err.Error()
 		return rep
 	}
+	if !Jailed() && drop != nil {
+		// 牢房在建的时候会把这个目录开成 0777（jail.Enter 里那一步），因为它随后要降权。
+		// 没牢房却照样降权时同理：setuid 之后的进程连自己的目录都进不去，每条提交只会撞
+		// 一句 `fork/exec ...: permission denied`。判完就删，这里放宽的是这一次提交自己住的那层。
+		// （再往上的 `-dir` 仍归部署方负责：容器把它挂在 mode=1777 的 tmpfs 上。）
+		if err := os.Chmod(dir, 0o777); err != nil {
+			rep.Detail = "workdir mode: " + err.Error()
+			return rep
+		}
+	}
 
 	source := filepath.Join(dir, tool.SourceFile)
 	if err := writeRunFile(source, []byte(task.Source)); err != nil {
