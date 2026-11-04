@@ -125,6 +125,16 @@ func normalizeOutput(body []byte) string {
 // caller can publish partial results while the rest is still running.
 type Progress func(row RunRow)
 
+// userDirName 是这次提交自己的工作目录，也是选手程序牢房的根。
+//
+// 判题器、交互器与它们要读的答案文件不能住在这里：它们对选手来说必须是另一个
+// chroot，否则一份提交可以直接 fopen("/checker/program")、读 itx2.dat，甚至把
+// checker 换成一个 exit 0 的假程序。三个目录分离后，兄弟目录不在选手的根里。
+const userDirName = "user"
+
+// userDirOf 返回提交根下属于选手的那一层。
+func userDirOf(root string) string { return filepath.Join(root, userDirName) }
+
 // Judge builds and runs one submission over all of its cases. It never talks to
 // the network: the caller has already fetched the case data. drop is the uid a
 // submission is run as, when the judge has one to give it; onProgress may be nil.
@@ -138,20 +148,27 @@ func Judge(task Task, tool Tool, dir string, drop *DropTo, onProgress Progress) 
 		rep.Detail = "workdir: " + err.Error()
 		return rep
 	}
+	// 选手的根与 checker/interactor 的根是三个兄弟目录；dir 只是本次提交的容器，
+	// 不直接交给任何一侧的 chroot。
+	userDir := userDirOf(dir)
+	if err := PrepareDir(userDir, drop); err != nil {
+		rep.Detail = "workdir: " + err.Error()
+		return rep
+	}
 
-	source := filepath.Join(dir, tool.SourceFile)
+	source := filepath.Join(userDir, tool.SourceFile)
 	if err := writeRunFile(source, []byte(task.Source)); err != nil {
 		rep.Detail = "write source: " + err.Error()
 		return rep
 	}
 	// 解释型语言自带的那份护栏要在学生代码之前落到同一个目录里：Run 里按 {dir} 引用它。
-	if err := writeSupport(tool, dir); err != nil {
+	if err := writeSupport(tool, userDir); err != nil {
 		rep.Verdict, rep.Detail = IE, err.Error()
 		return rep
 	}
 
 	if tool.Compiles() {
-		build := Run(tool.CompileArgs(dir), dir, nil, compileLimitsFor(drop))
+		build := Run(tool.CompileArgs(userDir), userDir, nil, compileLimitsFor(drop))
 		if build.Exit != 0 {
 			rep.Verdict = CE
 			rep.Detail = clipText(string(build.Stderr), maxDetail)
@@ -175,7 +192,7 @@ func Judge(task Task, tool Tool, dir string, drop *DropTo, onProgress Progress) 
 	}
 
 	runLimits := Limits{TimeMS: task.TimeLimitMS, MemKB: task.MemLimitKB, RunAs: drop}
-	argv := tool.RunArgs(dir)
+	argv := tool.RunArgs(userDir)
 	if !tool.Compiles() && !strings.Contains(strings.Join(tool.Run, " "), "{src}") {
 		// 解释器把源码接在命令行末尾；Run 里已经写了 {src} 的（Python 要在源码之前
 		// 先上护栏）就不再追加，否则同一份 main.py 会被交给解释器两遍。
@@ -193,19 +210,22 @@ func Judge(task Task, tool Tool, dir string, drop *DropTo, onProgress Progress) 
 		switch {
 		case len(task.Interactor) > 0:
 			// 交互题：选手的 stdin/stdout 接到交互器上，判定由交互器的退出码给出。
-			duo := runInteractive(task.Interactor, argv, dir, tc, runLimits)
+			// 交互器的根是它自己的兄弟目录，选手看不到 itx0/1/2.dat。
+			duo := runInteractive(task.Interactor, argv, userDir, filepath.Join(dir, AuxInteractor), tc, runLimits)
 			ex = duo.User
 			// 用时按两侧之和报（口径与判定一致），内存仍报选手那一份——交互器占多少不是
 			// 学生的错。
 			ex.TimeMS, ex.TimeMin = duo.TimeMS, duo.User.TimeMin || duo.Interactor.TimeMin
 			v, note = verdictForDuo(duo)
 		default:
-			ex = Run(argv, dir, tc.Input, runLimits)
+			ex = Run(argv, userDir, tc.Input, runLimits)
 			v = ex.Verdict
 			if v == AC {
 				switch {
 				case len(task.SPJ) > 0:
-					v, note = checkWithSPJ(task.SPJ, dir, tc, ex.Stdout, drop)
+					// 判题器要读的输入/输出/答案只落在 checker 自己的根里；选手的根里只有
+					// 它自己的源码与二进制。
+					v, note = checkWithSPJ(task.SPJ, filepath.Join(dir, AuxChecker), tc, ex.Stdout, drop)
 				case !OutputsMatch(ex.Stdout, tc.Expected):
 					v, note = WA, diffExcerpt(ex.Stdout, tc.Expected)
 				}

@@ -150,7 +150,7 @@ func (d *Duo) finish(w duoWait, userOut, userErr, itxOut, itxErr *limitedBuffer,
 //
 // 它不返回 error：一边崩了、被信号打死、卡住不返回，都是**判定**而不是判机出错，必须变成
 // 一条能显示出来的结果，而不是一句 Go 错误把这条工单吞掉。
-func RunDuo(userArgv, interactorArgv []string, dir string, userLim, interactorLim Limits) Duo {
+func RunDuo(userArgv, interactorArgv []string, userDir, interactorDir string, userLim, interactorLim Limits) Duo {
 	d := Duo{
 		User:       Execution{Verdict: IE, TimeMS: -1, MemKB: -1},
 		Interactor: Execution{Verdict: IE, TimeMS: -1, MemKB: -1},
@@ -198,10 +198,10 @@ func RunDuo(userArgv, interactorArgv []string, dir string, userLim, interactorLi
 	itxOut, itxErr := newCappedBuffer(MaxOutput), newCappedBuffer(MaxStderr)
 
 	userCmd := exec.Command(userBin, userArgv[1:]...)
-	userCmd.Dir, userCmd.Env, userCmd.Stderr = dir, runEnv(dir), userErr
+	userCmd.Dir, userCmd.Env, userCmd.Stderr = userDir, runEnv(userDir), userErr
 	userCmd.WaitDelay = reapGrace
 	itxCmd := exec.Command(itxBin, interactorArgv[1:]...)
-	itxCmd.Dir, itxCmd.Env, itxCmd.Stderr = dir, runEnv(dir), itxErr
+	itxCmd.Dir, itxCmd.Env, itxCmd.Stderr = interactorDir, runEnv(interactorDir), itxErr
 	itxCmd.WaitDelay = reapGrace
 
 	userIn, err := userCmd.StdinPipe()
@@ -436,7 +436,15 @@ func commentOf(e Execution) string {
 // 时限只有一份，就是题面那个：它按两侧 CPU 之和判定，所以交互器自己不设单独时限——各设
 // 一份等于给同一道题两个不同的时钟，报了之和却按各自的限值杀进程，谁也对不上。
 // 内存两边各有各的：题面那个管选手，auxLimits 那个管交互器。
-func runInteractive(interactor, userArgv []string, dir string, tc Case, lim Limits) Duo {
+// runInteractive 的输入/答案/转写全部落在 interactorDir：交互器的牢房根就是它，
+// 选手的牢房根是 userDir，两边不是同一个文件系统视图，选手读不到 itx2.dat。
+func runInteractive(interactor, userArgv []string, userDir, interactorDir string, tc Case, lim Limits) Duo {
+	if err := PrepareDir(interactorDir, lim.RunAs); err != nil {
+		return Duo{
+			User:       Execution{Verdict: IE, TimeMS: -1, MemKB: -1, Note: "交互器目录建不出来: " + err.Error()},
+			Interactor: Execution{Verdict: IE, TimeMS: -1, MemKB: -1},
+		}
+	}
 	paths := make([]string, 0, 3)
 	for i := 0; i < 3; i++ {
 		var body []byte
@@ -447,7 +455,7 @@ func runInteractive(interactor, userArgv []string, dir string, tc Case, lim Limi
 			body = tc.Expected
 		}
 		// 中间那份是对话结束后才写的转写，先把名字占好，交互器按同一套约定拿三个参数。
-		p := filepath.Join(dir, "itx"+strconv.Itoa(i)+".dat")
+		p := filepath.Join(interactorDir, "itx"+strconv.Itoa(i)+".dat")
 		if err := writeRunFile(p, body); err != nil {
 			return Duo{
 				User:       Execution{Verdict: IE, TimeMS: -1, MemKB: -1, Note: "交互题的文件写不出来: " + err.Error()},
@@ -456,7 +464,7 @@ func runInteractive(interactor, userArgv []string, dir string, tc Case, lim Limi
 		}
 		paths = append(paths, p)
 	}
-	d := RunDuo(userArgv, append(append([]string{}, interactor...), paths...), dir,
+	d := RunDuo(userArgv, append(append([]string{}, interactor...), paths...), userDir, interactorDir,
 		lim, Limits{MemKB: auxLimits.MemKB, MaxProcs: auxLimits.MaxProcs, RunAs: lim.RunAs})
 	// 转写落在交互器的第二个参数上：出争议时"学生到底答了什么"只有这一份证据。
 	if err := writeRunFile(paths[1], d.User.Stdout); err != nil {

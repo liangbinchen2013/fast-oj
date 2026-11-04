@@ -149,6 +149,42 @@ int main(){
 	t.Logf("网络/ptrace 探针：%s", out)
 }
 
+// 选手根目录与 checker/interactor 根目录必须是兄弟目录，不能是同一个 chroot：
+// 否则一份提交可以读走 checker 源码、交互题答案，甚至把 checker 换成 exit 0 的假程序。
+func TestJailDoesNotExposeSiblingJudgeAssets(t *testing.T) {
+	jailOn(t)
+	tool := requireToolchain(t)
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "checker"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "checker", "secret"), []byte("answer"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "itx2.dat"), []byte("answer"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source := `#include <cstdio>
+int main(){
+  FILE *f = fopen("checker/secret", "rb");
+  int checker = f != nullptr;
+  if (f) fclose(f);
+  f = fopen("itx2.dat", "rb");
+  int answer = f != nullptr;
+  if (f) fclose(f);
+  printf("%d %d\n", checker, answer);
+  return 0;
+}`
+	rep := Judge(Task{
+		SubmissionID: 1, PID: "P1", Language: "cpp", Source: source,
+		TimeLimitMS: 2000, MemLimitKB: 65536,
+		Cases: []Case{{Name: "1", Ordinal: 1, Score: 100, Input: []byte("\n"), Expected: []byte("0 0\n")}},
+	}, tool, root, nil, nil)
+	if rep.Verdict != AC {
+		t.Fatalf("选手看到了兄弟目录里的 checker/答案：%s（%s）", rep.Verdict, rep.Detail)
+	}
+}
+
 // 超内存必须还是 MLE，不能被 RLIMIT_AS 抢先打成 RE：判题口径不能因为开沙盒而变。
 func TestJailReportsMLENotRE(t *testing.T) {
 	jailOn(t)
