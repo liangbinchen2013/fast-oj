@@ -3,6 +3,7 @@
 package judge
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
@@ -94,15 +95,23 @@ func (g *plainGuard) Kill() error {
 	return nil
 }
 
-// Measure reports the leader's current resident set from /proc, which is what the
+// Measure reports the resident set of the whole process group, which is what the
 // memory trip-wire polls while the run is alive. Time still comes from the wait
 // status. It gives up with -1 where /proc does not exist (macOS) or the process is
 // already gone, so the trip-wire simply never fires and the container's cgroup
-// stays the only hard cap. Child processes are not summed: a submission that forks
-// is bounded by --pids-limit anyway.
+// stays the only hard cap.
+//
+// 子进程必须算进来：主程序可以 fork 一批孩子，每个孩子都只吃自己的 RLIMIT_AS，而只读
+// leader 的 statm 时这些内存完全看不见。Setpgid 让它们都留在同一个组里，setsid/setpgid
+// 又已经被 seccomp 挡住，所以按 pgrp 汇总就是这次运行的内存。
 func (g *plainGuard) Measure() (int, int) {
 	if g.proc == nil {
 		return -1, -1
+	}
+	if runtime.GOOS == "linux" {
+		if memKB, ok := processGroupRSSKB(g.proc.Pid); ok {
+			return -1, memKB
+		}
 	}
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", g.proc.Pid))
 	if err != nil {
@@ -117,6 +126,56 @@ func (g *plainGuard) Measure() (int, int) {
 		return -1, -1
 	}
 	return -1, pages * os.Getpagesize() / 1024
+}
+
+// processGroupRSSKB sums statm resident pages for every process whose pgrp is
+// pgid. It reads /proc directly and returns false on any platform/container where
+// that is unavailable, so callers can fall back to the leader's reading.
+func processGroupRSSKB(pgid int) (int, bool) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0, false
+	}
+	pageKB := os.Getpagesize() / 1024
+	total, found := 0, false
+	for _, entry := range entries {
+		pid, err := strconv.Atoi(entry.Name())
+		if err != nil {
+			continue
+		}
+		stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+		if err != nil {
+			continue
+		}
+		// comm 可能带空格和右括号；pgrp 在最后一个 ')' 之后：state ppid pgrp ...
+		closeParen := bytes.LastIndexByte(stat, ')')
+		if closeParen < 0 {
+			continue
+		}
+		fields := strings.Fields(string(stat[closeParen+1:]))
+		if len(fields) < 3 {
+			continue
+		}
+		pgrp, err := strconv.Atoi(fields[2])
+		if err != nil || pgrp != pgid {
+			continue
+		}
+		statm, err := os.ReadFile(fmt.Sprintf("/proc/%d/statm", pid))
+		if err != nil {
+			continue
+		}
+		statmFields := strings.Fields(string(statm))
+		if len(statmFields) < 2 {
+			continue
+		}
+		pages, err := strconv.Atoi(statmFields[1])
+		if err != nil || pages <= 0 {
+			continue
+		}
+		total += pages * pageKB
+		found = true
+	}
+	return total, found
 }
 
 func (g *plainGuard) Close() error { return nil }

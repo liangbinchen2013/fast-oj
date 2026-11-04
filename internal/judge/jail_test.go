@@ -3,10 +3,14 @@
 package judge
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/liangbinchen2013/fast-oj/internal/jail"
 )
@@ -123,6 +127,7 @@ func TestJailHasNoNetwork(t *testing.T) {
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/ptrace.h>
+#include <unistd.h>
 int main(){
   int s = socket(AF_INET, SOCK_STREAM, 0);
   printf("socket=%d errno=%d", s, s < 0 ? errno : 0);
@@ -135,6 +140,9 @@ int main(){
   errno = 0;
   long p = ptrace(PTRACE_TRACEME, 0, nullptr, nullptr);
   printf(" ptrace=%ld errno=%d", p, p < 0 ? errno : 0);
+  errno = 0;
+  int pg = setpgid(0, 0);
+  printf(" setpgid=%d errno=%d", pg, pg < 0 ? errno : 0);
   return 0;
 }`)
 	if strings.Contains(out, "connect=0") {
@@ -146,7 +154,10 @@ int main(){
 	if !strings.Contains(out, "ptrace=-1 errno=1") {
 		t.Errorf("seccomp 没把 ptrace 挡成 EPERM：%s", out)
 	}
-	t.Logf("网络/ptrace 探针：%s", out)
+	if !strings.Contains(out, "setpgid=-1 errno=1") {
+		t.Errorf("seccomp 没把 setpgid 挡成 EPERM，子进程可以逃出判机的进程组：%s", out)
+	}
+	t.Logf("网络/ptrace/进程组探针：%s", out)
 }
 
 // 选手根目录与 checker/interactor 根目录必须是兄弟目录，不能是同一个 chroot：
@@ -183,6 +194,48 @@ int main(){
 	if rep.Verdict != AC {
 		t.Fatalf("选手看到了兄弟目录里的 checker/答案：%s（%s）", rep.Verdict, rep.Detail)
 	}
+}
+
+// 主程序正常 exit 之后，它 fork 出来、还在死循环的子进程必须一起收掉；否则会占满
+// nobody 的 nproc 预算，让同一台判机后续的编译与判题全部 fork 失败。
+func TestJailKillsLeftoverChildrenAfterNormalExit(t *testing.T) {
+	jailOn(t)
+	dir := t.TempDir()
+	source := `#include <cstdio>
+#include <unistd.h>
+int main(){
+  pid_t p = fork();
+  if (p == 0) { close(1); close(2); for (;;) pause(); }
+  FILE *f = fopen("child.pid", "w");
+  if (f) { fprintf(f, "%d", (int)p); fclose(f); }
+  return 0;
+}`
+	if err := os.WriteFile(filepath.Join(dir, "leftover.cpp"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if build := Run([]string{"g++", "-O2", "-std=c++17", "-o", "leftover", "leftover.cpp"}, dir, nil, CompileLimits); build.Exit != 0 {
+		t.Fatalf("编译失败：%s", build.Stderr)
+	}
+	ex := Run([]string{filepath.Join(dir, "leftover")}, dir, nil, Limits{TimeMS: 2000, MemKB: 65536})
+	if ex.Verdict != AC {
+		t.Fatalf("主程序退出被判成 %s（%s）", ex.Verdict, ex.Note)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "child.pid"))
+	if err != nil {
+		t.Fatalf("主程序没写下子进程号：%v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid <= 0 {
+		t.Fatalf("子进程号 %q 不可用：%v", raw, err)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("主程序退出后子进程 %d 仍然活着：判机没有回收整个进程组", pid)
 }
 
 // 超内存必须还是 MLE，不能被 RLIMIT_AS 抢先打成 RE：判题口径不能因为开沙盒而变。

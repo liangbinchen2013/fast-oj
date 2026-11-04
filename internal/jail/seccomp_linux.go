@@ -63,6 +63,9 @@ var denied = []uint32{
 
 	syscall.SYS_MOUNT, syscall.SYS_UMOUNT2, syscall.SYS_PIVOT_ROOT, syscall.SYS_CHROOT,
 	sysSetns, syscall.SYS_UNSHARE,
+	// 这两个不是"出门"，是"离开判机的进程组"：主程序退出后，换过会话/进程组的子进程
+	// 会躲过判机的组回收，留在机器上吃 CPU、占满 uid 的 nproc 预算。判题程序不需要它们。
+	syscall.SYS_SETSID, syscall.SYS_SETPGID,
 }
 
 // program 编出那条 cBPF 指令流：先认架构（不是 x86_64 就整个放行——这里的系统调用号

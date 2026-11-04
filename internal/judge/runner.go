@@ -222,7 +222,10 @@ func Run(argv []string, dir string, stdin []byte, lim Limits) Execution {
 	if err != nil {
 		return Execution{Verdict: IE, Note: "sandbox init failed: " + err.Error()}
 	}
+	// 正常结束也要收整个进程组：主程序 exit 之后，fork 出来的子进程不会自己消失。
+	// defer 的顺序是 LIFO：先注册 Close，再注册 Kill，收尾时先 Kill 再 Close。
 	defer g.Close()
+	defer func() { _ = g.Kill() }()
 
 	if err := g.Configure(cmd); err != nil {
 		return Execution{Verdict: IE, Note: "sandbox config failed: " + err.Error()}

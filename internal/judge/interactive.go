@@ -246,6 +246,12 @@ func RunDuo(userArgv, interactorArgv []string, userDir, interactorDir string, us
 		return giveUp(duoInteractor, "sandbox init failed: "+err.Error())
 	}
 	defer itxGuard.Close()
+	// 正常对话结束也要收两颗进程树：主进程退出后 fork 出来的子进程仍在同一个组里。
+	// 这一句在 Close 之后注册，LIFO 会先 Kill 再 Close。
+	defer func() {
+		_ = itxGuard.Kill()
+		_ = userGuard.Kill()
+	}()
 
 	// bail 用在"起不来"的那几条路上：已经起来的那一侧必须一起收掉。留一个没人管的进程在
 	// 机器上跑，比一条失败的工单危险得多。
