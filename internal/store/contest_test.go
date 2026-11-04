@@ -36,6 +36,10 @@ func defaultContest(c *Contest) *Contest {
 	if c.PenaltyMS == 0 {
 		c.PenaltyMS = 20 * minuteMS
 	}
+	// The database default is hidden (a half-filled form should not publish a
+	// contest), but the test fixtures are normal public contests unless a test
+	// explicitly asks for a hidden one via seedHiddenContest.
+	c.Visible = true
 	return c
 }
 
@@ -46,6 +50,17 @@ func seedContest(t *testing.T, db *DB, c *Contest) Contest {
 		t.Fatalf("create contest: %v", err)
 	}
 	return out
+}
+
+func seedHiddenContest(t *testing.T, db *DB, c *Contest) Contest {
+	t.Helper()
+	out := seedContest(t, db, c)
+	out.Visible = false
+	updated, err := db.UpdateContest(hctx, out)
+	if err != nil {
+		t.Fatalf("hide contest: %v", err)
+	}
+	return updated
 }
 
 // seedProblem makes a problem with judged cases worth the listed scores. The files
@@ -198,7 +213,7 @@ func TestContestPhaseComesFromTheClock(t *testing.T) {
 func TestContestListHidesTheJoinCode(t *testing.T) {
 	db := openTestDB(t)
 	secret := "sup3r-secret-code"
-	hidden := seedContest(t, db, &Contest{CID: "H1", Title: "内部赛", Visible: false, JoinCode: secret})
+	hidden := seedHiddenContest(t, db, &Contest{CID: "H1", Title: "内部赛", JoinCode: secret})
 	// A full-document write means a zero bool is a decision: the list only shows the
 	// contest that says so.
 	seedContest(t, db, &Contest{CID: "P1", Title: "公开赛", Visible: true, JoinCode: secret})
@@ -349,6 +364,15 @@ func TestContestProblemMounting(t *testing.T) {
 	}
 	if err := db.RemoveContestProblem(hctx, c.ID, a.ID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("double remove = %v", err)
+	}
+}
+
+func TestJoinContestRefusesHiddenWithoutCode(t *testing.T) {
+	db := openTestDB(t)
+	u := mustUser(t, db, "hidden_joiner")
+	c := seedHiddenContest(t, db, &Contest{CID: "J0", Title: "隐藏草稿"})
+	if _, err := db.JoinContest(hctx, c.ID, u.ID, "", ""); !errors.Is(err, ErrContestHidden) {
+		t.Fatalf("hidden contest without code = %v, want ErrContestHidden", err)
 	}
 }
 

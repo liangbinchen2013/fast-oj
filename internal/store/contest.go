@@ -38,6 +38,7 @@ const (
 // the web layer shows the text instead of translating codes of its own.
 var (
 	ErrContestClosed    = errors.New("这场比赛已经结束，不能再加入")
+	ErrContestHidden    = errors.New("这场比赛不存在")
 	ErrContestCode      = errors.New("加入码不对")
 	ErrTeamFull         = errors.New("队伍人数已满")
 	ErrTeamUnknown      = errors.New("没有这支队伍，或者它不属于这场比赛")
@@ -639,6 +640,12 @@ func (db *DB) JoinContest(ctx context.Context, contestID, userID int64, code, te
 	}
 	if existing, ok := db.ContestMemberOf(ctx, contestID, userID); ok {
 		return existing, nil
+	}
+	// 未公开且没有加入码的比赛（草稿/内部赛）不是公开入口：不知道编号的人不该通过
+	// join 这条路由把它变成“能看题目、能看名单”的成员。隐藏但有码的私有赛仍按码放行；
+	// 已有成员在上面直接返回，不受这条影响。
+	if !c.Visible && c.JoinCode == "" {
+		return ContestMember{}, ErrContestHidden
 	}
 	// A constant-time comparison costs nothing here and keeps the difference
 	// between "wrong code" and "not yet tried that code" out of the timings.

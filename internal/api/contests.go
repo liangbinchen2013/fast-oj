@@ -849,6 +849,12 @@ func (s *Server) handleContestJoin(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, r, err)
 		return
 	}
+	// 未公开且没有加入码的比赛（草稿/内部赛）的 join 入口按不存在处理：知道/猜到 CID
+	// 不能把草稿赛变成成员可见。隐藏但有码的私有赛仍走加入码；主办方本来就能管理整场。
+	if !c.Visible && c.JoinCode == "" {
+		s.respondError(w, r, http.StatusNotFound, "没有这场比赛："+c.CID)
+		return
+	}
 	a, ok := s.signedInToContest(w, r, c)
 	if !ok {
 		return
@@ -900,6 +906,11 @@ func (s *Server) handleContestTeam(w http.ResponseWriter, r *http.Request) {
 	c, err := s.db.FindContest(r.Context(), r.PathValue("key"))
 	if err != nil {
 		s.writeStoreError(w, r, err)
+		return
+	}
+	if !c.Visible && c.JoinCode == "" {
+		// 组队表单也是写入口：未公开且无码的比赛不通过它确认存在，更不允许非成员建空队占名。
+		s.respondError(w, r, http.StatusNotFound, "没有这场比赛："+c.CID)
 		return
 	}
 	a, ok := s.signedInToContest(w, r, c)

@@ -392,6 +392,32 @@ func TestContestMembersMayReadAnUnpublishedProblem(t *testing.T) {
 	}
 }
 
+// 未公开比赛（草稿/内部赛）的编号不能变成邀请函：join 与组队入口都按不存在处理。
+func TestHiddenContestCannotBeJoined(t *testing.T) {
+	h := newHarness(t)
+	host := h.signIn("hosthidden", permContestCreate)
+	player := h.signIn("hiddenplayer")
+	values := contestValues("C6051", "隐藏草稿赛")
+	values.Set("visible", "0")
+	if _, body := h.createContest(host, values); !strings.Contains(body, "比赛已建好") {
+		t.Fatalf("create hidden contest:\n%s", body)
+	}
+
+	if _, body := h.joinContest(player, "C6051", ""); !strings.Contains(body, "没有这场比赛") {
+		t.Fatalf("hidden contest join leaked existence or succeeded:\n%s", body)
+	}
+	if _, body := h.postAs(player, "/contests/C6051/teams", url.Values{"op": {"create"}, "name": {"lobby"}}); !strings.Contains(body, "没有这场比赛") {
+		t.Fatalf("hidden contest team create leaked existence:\n%s", body)
+	}
+	// A public contest remains joinable; the gate is visibility, not a blanket ban.
+	if _, body := h.createContest(host, contestValues("C6052", "公开赛")); !strings.Contains(body, "比赛已建好") {
+		t.Fatalf("create public contest:\n%s", body)
+	}
+	if _, body := h.joinContest(player, "C6052", ""); !strings.Contains(body, "已加入") {
+		t.Fatalf("visible contest join broke:\n%s", body)
+	}
+}
+
 func TestContestProblemPageShowsOnlyYourOwnRecentRows(t *testing.T) {
 	h := newHarness(t)
 	host := h.signIn("hostr", permContestCreate)
