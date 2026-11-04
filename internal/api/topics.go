@@ -35,9 +35,9 @@ type topicRow struct {
 	Author      string
 	DisplayName string
 	// Color 是这个名字的活跃度档位类名（见 feed.go 里同名的理由）。
-	Color     string
-	When      string
-	Comments  int
+	Color       string
+	When        string
+	Comments    int
 	HasProblem  bool
 	ProblemPID  string
 	ProblemName string
@@ -47,6 +47,15 @@ type topicRow struct {
 	CanDelete bool
 }
 
+// canSeeTopicProblem 决定帖子页/列表里能不能露出题目编号与标题。隐藏题的标题本身
+// 就是不该公开的信息；题目作者与有全见权限的人仍能看到。
+func canSeeTopicProblem(a actor, t store.Topic) bool {
+	if t.ProblemID == 0 || t.ProblemVisible {
+		return true
+	}
+	return a.User.ID != 0 && (a.User.ID == t.ProblemOwnerID || a.can(permProblemEditAny))
+}
+
 func topicRows(items []store.Topic, a actor) []topicRow {
 	rows := make([]topicRow, 0, len(items))
 	for _, t := range items {
@@ -54,11 +63,16 @@ func topicRows(items []store.Topic, a actor) []topicRow {
 		if t.DisplayName != "" {
 			name = t.DisplayName
 		}
+		showProblem := canSeeTopicProblem(a, t)
+		pid, title := "", ""
+		if showProblem {
+			pid, title = t.ProblemPID, t.ProblemTitle
+		}
 		rows = append(rows, topicRow{
 			ID: t.ID, Kind: t.Kind, KindLabel: store.TopicKindLabel(t.Kind),
 			Title: t.Title, Author: t.Author, DisplayName: name, Color: t.Color,
 			When: agoMS(t.CreatedAt), Comments: t.Comments,
-			HasProblem: t.ProblemID != 0, ProblemPID: t.ProblemPID, ProblemName: t.ProblemTitle,
+			HasProblem: showProblem && t.ProblemID != 0, ProblemPID: pid, ProblemName: title,
 			CanDelete: a.User.ID != 0 && (a.User.ID == t.AuthorID || a.can(permTopicModerate)),
 		})
 	}
@@ -163,7 +177,7 @@ type topicForm struct {
 
 // parseTopicForm reads the form and reports every problem in it, so a rejected post
 // can be redrawn with what was typed.
-func (s *Server) parseTopicForm(r *http.Request) topicForm {
+func (s *Server) parseTopicForm(r *http.Request, a actor) topicForm {
 	f := topicForm{
 		Kind:       r.FormValue("kind"),
 		Title:      strings.TrimSpace(r.FormValue("title")),
@@ -187,6 +201,9 @@ func (s *Server) parseTopicForm(r *http.Request) topicForm {
 		} else {
 			p, err := s.db.FindProblem(r.Context(), f.ProblemKey)
 			if err != nil {
+				f.Errors = append(f.Errors, "找不到题目 "+f.ProblemKey)
+			} else if !p.Visible && !a.canEditProblem(p) {
+				// 隐藏题的编号不能在求助贴里被用来确认题目存在。
 				f.Errors = append(f.Errors, "找不到题目 "+f.ProblemKey)
 			} else {
 				f.ProblemID = p.ID
@@ -231,7 +248,7 @@ func (s *Server) handleTopicNew(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?next="+url.QueryEscape(r.URL.RequestURI()), http.StatusSeeOther)
 		return
 	}
-	d, err := s.topicFormFor(r, r.URL.Query().Get("problem"))
+	d, err := s.topicFormFor(r, a, r.URL.Query().Get("problem"))
 	if err != nil {
 		s.writeStoreError(w, r, err)
 		return
@@ -243,10 +260,11 @@ func (s *Server) handleTopicNew(w http.ResponseWriter, r *http.Request) {
 // topicFormFor builds an empty form, preset to a 求助贴 when the reader came from a
 // problem page. A problem key that no longer resolves answers "no preset" rather than
 // failing the page: the reader can still write a 社区贴.
-func (s *Server) topicFormFor(r *http.Request, problemKey string) (topicFormData, error) {
+func (s *Server) topicFormFor(r *http.Request, a actor, problemKey string) (topicFormData, error) {
 	d := topicFormData{Action: "/topics", Kind: store.TopicCommunity}
 	if problemKey != "" {
-		if p, err := s.db.FindProblem(r.Context(), problemKey); err == nil {
+		if p, err := s.db.FindProblem(r.Context(), problemKey); err == nil &&
+			(p.Visible || a.canEditProblem(p)) {
 			d.Kind, d.Problem, d.LockedProblem = store.TopicHelp, p.PID, true
 		}
 	}
@@ -277,7 +295,7 @@ func (s *Server) handleTopicCreate(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, r, http.StatusForbidden, msg)
 		return
 	}
-	f := s.parseTopicForm(r)
+	f := s.parseTopicForm(r, a)
 	// The form is redrawn from what was posted, so an unresolvable problem key stays
 	// on the page as the error parseTopicForm reported instead of failing here.
 	d := topicFormData{Action: "/topics", Kind: f.Kind, LockedProblem: r.FormValue("locked") == "1"}
@@ -352,11 +370,16 @@ func (s *Server) handleTopicGet(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	showProblem := canSeeTopicProblem(a, topic)
+	pid, name := "", ""
+	if showProblem {
+		pid, name = topic.ProblemPID, topic.ProblemTitle
+	}
 	d := topicData{
 		ID: topic.ID, Kind: topic.Kind, KindLabel: store.TopicKindLabel(topic.Kind),
 		Title: topic.Title, Author: topic.Author, Color: topic.Color, When: agoMS(topic.CreatedAt),
 		Body:       renderMarkdownHTML(topic.Body),
-		HasProblem: topic.ProblemID != 0, ProblemPID: topic.ProblemPID, ProblemName: topic.ProblemTitle,
+		HasProblem: showProblem && topic.ProblemID != 0, ProblemPID: pid, ProblemName: name,
 		CanDelete: a.User.ID != 0 && (a.User.ID == topic.AuthorID || a.can(permTopicModerate)),
 	}
 	if topic.DisplayName != "" {
@@ -364,7 +387,7 @@ func (s *Server) handleTopicGet(w http.ResponseWriter, r *http.Request) {
 	} else {
 		d.DisplayName = topic.Author
 	}
-	if topic.ProblemID != 0 {
+	if showProblem && topic.ProblemID != 0 {
 		d.BackLink = "/problems/" + url.PathEscape(topic.ProblemPID) + "/topics"
 		d.BackText = "这道题的全部求助"
 	} else {

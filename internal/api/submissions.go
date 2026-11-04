@@ -36,6 +36,31 @@ type detailView struct {
 
 var seeEverything = detailView{Source: true, Runs: true, Perf: true, Diff: true, Judge: true}
 
+// canReadSubmission 决定一条提交现在能不能给这个读者看。它和 store 里的公开列表过滤
+// 保持同一条规则：隐藏题只给作者/题目主人/提交者自己；进行中的 OI 与封榜比赛里的别人
+// 结果一律不可见，除非是主办方或有全见权限。
+func canReadSubmission(a actor, d store.SubmissionDetail) bool {
+	if a.can(permSubmissionViewAny) || a.can(permProblemEditAny) {
+		return true
+	}
+	if d.ProblemOwner != 0 && a.User.ID == d.ProblemOwner {
+		return true
+	}
+	if a.User.ID != 0 && a.User.ID == d.UserID {
+		return true
+	}
+	if !d.ProblemVisible {
+		return false
+	}
+	if d.ContestID == 0 || d.ContestEndAt <= time.Now().UnixMilli() {
+		return true
+	}
+	if d.ContestOwnerID != 0 && a.User.ID == d.ContestOwnerID {
+		return true
+	}
+	return d.ContestStanding && d.ContestMode != store.ContestOI
+}
+
 func submissionView(a actor, d store.SubmissionDetail) detailView {
 	own := a.User.ID != 0 && a.User.ID == d.UserID
 	if a.can(permSubmissionViewAny) || a.can(permProblemEditAny) ||
@@ -85,6 +110,12 @@ func (s *Server) handleSubmitGet(w http.ResponseWriter, r *http.Request) {
 	d, err := s.db.SubmissionDetail(r.Context(), id)
 	if err != nil {
 		s.writeStoreError(w, r, err)
+		return
+	}
+	if !canReadSubmission(a, d) {
+		// 不存在、隐藏题的别人提交、以及进行中 OI 的别人成绩，对外是同一个答案：
+		// 别用存在性给攻击者当探针。
+		s.respondError(w, r, http.StatusNotFound, "没有这条提交")
 		return
 	}
 
@@ -146,6 +177,9 @@ func (s *Server) handleSubmitList(w http.ResponseWriter, r *http.Request) {
 	var f store.DetailFilter
 	f.Limit = pageLimit(q.Get("limit"))
 	f.AfterID, _ = strconv.ParseInt(q.Get("after"), 10, 64)
+	f.PublicView = true
+	f.ViewerID = a.User.ID
+	f.SeeAll = a.can(permSubmissionViewAny) || a.can(permProblemEditAny)
 
 	switch who := q.Get("user"); who {
 	case "":

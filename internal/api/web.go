@@ -335,7 +335,11 @@ func (s *Server) problemPage(w http.ResponseWriter, r *http.Request, a actor, p 
 	}
 
 	// The recent list is scoped below when the page is a contest page.
-	filter := store.DetailFilter{ProblemID: p.ID, Limit: 10}
+	filter := store.DetailFilter{
+		ProblemID: p.ID, Limit: 10,
+		PublicView: true, ViewerID: a.User.ID,
+		SeeAll: a.can(permSubmissionViewAny) || a.can(permProblemEditAny),
+	}
 	if contest.ID != 0 {
 		// Inside a contest the recent list is your own: other people's verdicts on a
 		// problem that is still being played are the answer sheet.
@@ -652,7 +656,9 @@ func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, r, err)
 		return
 	}
-	solved, err := s.db.SolvedProblems(ctx, u.ID)
+	a, _ := s.authenticate(r)
+	seeAll := a.can(permSubmissionViewAny) || a.can(permProblemEditAny)
+	solved, err := s.db.SolvedProblems(ctx, u.ID, a.User.ID, seeAll)
 	if err != nil {
 		s.writeStoreError(w, r, err)
 		return
@@ -662,7 +668,10 @@ func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, r, err)
 		return
 	}
-	recent, err := s.db.ListSubmissionDetails(ctx, store.DetailFilter{UserID: u.ID, Limit: 20})
+	recent, err := s.db.ListSubmissionDetails(ctx, store.DetailFilter{
+		UserID: u.ID, Limit: 20,
+		PublicView: true, ViewerID: a.User.ID, SeeAll: seeAll,
+	})
 	if err != nil {
 		s.writeStoreError(w, r, err)
 		return
@@ -673,7 +682,6 @@ func (s *Server) handleUser(w http.ResponseWriter, r *http.Request) {
 		submits += n
 	}
 
-	a, _ := s.authenticate(r)
 	me := a.viewer()
 	totalProblems, err := s.db.CountProblems(ctx, !a.can(permProblemEditAny))
 	if err != nil {

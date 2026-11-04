@@ -189,6 +189,33 @@ func TestSubmissionRoundTripAndVisibility(t *testing.T) {
 	}
 }
 
+// 隐藏题的提交不能从公开列表、个人主页或提交详情页确认题目存在；作者仍能看自己的。
+func TestHiddenProblemSubmissionIsNotPublic(t *testing.T) {
+	h := newHarness(t)
+	owner := h.signIn("hidowner2", permProblemCreate)
+	if code, body := h.postAs(owner, "/problems", hiddenValues("HIDE2", "隐藏题")); code != http.StatusOK {
+		t.Fatalf("create hidden = %d %s", code, short(body))
+	}
+	h.uploadCasesAs(owner, "HIDE2")
+	code, _, hdr := h.submitRaw("HIDE2", url.Values{"language": {"cpp"}, "source": {"int main(){}"}}, owner)
+	if code != http.StatusSeeOther || !strings.HasPrefix(hdr.Get("Location"), "/submissions/") {
+		t.Fatalf("submit hidden = %d %q", code, hdr.Get("Location"))
+	}
+	page := hdr.Get("Location")
+	if code, _ := h.htmlGet(page, ""); code != http.StatusNotFound {
+		t.Fatalf("anonymous read of a hidden-problem submission = %d, want 404", code)
+	}
+	if _, list := h.htmlGet("/submissions?problem=HIDE2", ""); strings.Contains(list, "隐藏题") {
+		t.Fatalf("the public list leaked the hidden problem title:\n%s", list)
+	}
+	if _, profile := h.htmlGet("/u/hidowner2", ""); strings.Contains(profile, "隐藏题") || strings.Contains(profile, "HIDE2") {
+		t.Fatalf("the public profile leaked the hidden problem:\n%s", profile)
+	}
+	if code, own := h.getAs(owner, page); code != http.StatusOK || !strings.Contains(own, "隐藏题") {
+		t.Fatalf("the hidden problem's author cannot read their own submission: %d\n%s", code, own)
+	}
+}
+
 // The detail level is what lets a contest hide the failing case while still
 // showing the score, and it must never hide anything from the author.
 func TestDetailLevelGradesTheSubmissionPage(t *testing.T) {

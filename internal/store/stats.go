@@ -123,9 +123,15 @@ func (db *DB) Leaderboard(ctx context.Context, limit int) ([]RankRow, error) {
 	}
 	rows, err := db.SQL.QueryContext(ctx,
 		`SELECT u.id, u.handle, `+personSQL("u")+`,
-		        (SELECT COUNT(DISTINCT s.problem_id) FROM submissions s WHERE s.user_id=u.id AND s.verdict='AC'),
-		        (SELECT COUNT(*) FROM submissions s WHERE s.user_id=u.id),
-		        (SELECT MAX(s.judged_at) FROM submissions s WHERE s.user_id=u.id AND s.verdict='AC'),
+		        (SELECT COUNT(DISTINCT s.problem_id) FROM submissions s
+		           JOIN problems p ON p.id=s.problem_id
+		          WHERE s.user_id=u.id AND s.verdict='AC' AND p.visible=1),
+		        (SELECT COUNT(*) FROM submissions s
+		           JOIN problems p ON p.id=s.problem_id
+		          WHERE s.user_id=u.id AND p.visible=1),
+		        (SELECT MAX(s.judged_at) FROM submissions s
+		           JOIN problems p ON p.id=s.problem_id
+		          WHERE s.user_id=u.id AND s.verdict='AC' AND p.visible=1),
 		        IFNULL(u.points, 0), `+colorSQL("u")+`
 		 FROM users u
 		 WHERE u.role <> 'judge'
@@ -324,13 +330,33 @@ type SolvedProblem struct {
 	SolvedAt int64  `json:"solved_at"`
 }
 
-func (db *DB) SolvedProblems(ctx context.Context, userID int64) ([]SolvedProblem, error) {
-	rows, err := db.SQL.QueryContext(ctx,
-		`SELECT p.pid, p.title, MIN(s.time_ms), MAX(s.judged_at)
+func (db *DB) SolvedProblems(ctx context.Context, userID, viewerID int64, seeAll bool) ([]SolvedProblem, error) {
+	q := `SELECT p.pid, p.title, MIN(s.time_ms), MAX(s.judged_at)
 		 FROM submissions s JOIN problems p ON p.id=s.problem_id
-		 WHERE s.user_id=? AND s.verdict='AC'
-		 GROUP BY s.problem_id, p.pid, p.title
-		 ORDER BY MAX(s.judged_at) DESC`, userID)
+		 WHERE s.user_id=? AND s.verdict='AC'`
+	args := []any{userID}
+	if !seeAll {
+		if viewerID != 0 {
+			// 隐藏题只给作者、题目主人、提交者本人看；自己看自己的题单不受隐藏影响。
+			q += ` AND (p.visible=1 OR p.owner_id=? OR ?)`
+			args = append(args, viewerID, viewerID == userID)
+		} else {
+			q += ` AND p.visible=1`
+		}
+		// 进行中的 OI / 封榜比赛：别人看不到这个人的该题 AC；题目主人与比赛主办方
+		// 仍需能核对，所以这两类 id 在 NOT EXISTS 里放行。
+		if viewerID != userID {
+			q += ` AND NOT EXISTS (
+				SELECT 1 FROM submissions sx JOIN contests cx ON cx.id=sx.contest_id
+				WHERE sx.user_id=? AND sx.problem_id=s.problem_id AND sx.verdict='AC'
+				  AND cx.end_at>? AND (cx.mode='oi' OR cx.standing_open=0)
+				  AND (cx.owner_id IS NULL OR cx.owner_id<>?)
+			)`
+			args = append(args, userID, nowMS(), viewerID)
+		}
+	}
+	q += ` GROUP BY s.problem_id, p.pid, p.title ORDER BY MAX(s.judged_at) DESC`
+	rows, err := db.SQL.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

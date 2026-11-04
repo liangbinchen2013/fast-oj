@@ -414,10 +414,13 @@ func TestContestProblemPageShowsOnlyYourOwnRecentRows(t *testing.T) {
 			t.Fatalf("submit %s:\n%s", p.handle, body)
 		}
 	}
-	// Outside a contest the recent table is the usual public feed of verdicts.
+	// 比赛还在进行、又封着榜：普通题面页也不能把别人的成绩当成公开动态露出来。
 	plain := h.getPage(first, "/problems/P6050")
-	if !strings.Contains(plain, "rsecond") {
-		t.Errorf("the ordinary problem page lost the other player's row:\n%s", plain)
+	if strings.Contains(plain, "rsecond") {
+		t.Errorf("the ordinary problem page leaked another player's verdict during a running OI:\n%s", plain)
+	}
+	if !strings.Contains(plain, "rfirst") {
+		t.Errorf("the ordinary problem page lost your own row:\n%s", plain)
 	}
 	// Inside the contest it is only yours, because other verdicts are the answer sheet.
 	inside := h.getPage(first, "/problems/P6050?contest="+strconv.FormatInt(cid, 10))

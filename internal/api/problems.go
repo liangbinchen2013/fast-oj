@@ -375,6 +375,11 @@ func (s *Server) handleCaseBody(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if !p.Visible && !a.canSeeTestcases(p) {
+		// 隐藏题的样例也不该成为枚举题目的把手；作者与用例维护者仍能看。
+		s.respondError(w, r, http.StatusNotFound, "problem "+p.PID+" not found")
+		return
+	}
 	tc, err := s.db.GetTestcase(r.Context(), p.ID, r.PathValue("name"))
 	if err != nil {
 		s.writeStoreError(w, r, err)

@@ -50,8 +50,12 @@ type Topic struct {
 	ProblemID    int64
 	ProblemPID   string
 	ProblemTitle string
-	Comments     int
-	CreatedAt    int64
+	// ProblemVisible/ProblemOwnerID 让公开列表与帖子页能像提交列表一样隐藏
+	// 未公开题目：标题与编号本身就是不该出现在公共页上的信息。
+	ProblemVisible bool
+	ProblemOwnerID int64
+	Comments       int
+	CreatedAt      int64
 }
 
 type TopicComment struct {
@@ -77,7 +81,8 @@ type TopicFilter struct {
 }
 
 var topicColumns = `t.id, t.kind, t.title, t.body, t.author_id, u.handle, ` + personSQL(`u`) + `, ` + colorSQL(`u`) + `,
-		IFNULL(t.problem_id, 0), IFNULL(p.pid, ''), IFNULL(p.title, ''), t.created_at`
+		IFNULL(t.problem_id, 0), IFNULL(p.pid, ''), IFNULL(p.title, ''),
+		IFNULL(p.visible, 0), IFNULL(p.owner_id, 0), t.created_at`
 
 const topicFrom = ` FROM topics t
 	JOIN users u ON u.id = t.author_id
@@ -85,8 +90,10 @@ const topicFrom = ` FROM topics t
 
 func scanTopic(row scanner) (Topic, error) {
 	var t Topic
+	var visible int
 	err := row.Scan(&t.ID, &t.Kind, &t.Title, &t.Body, &t.AuthorID, &t.Author, &t.DisplayName, &t.Color,
-		&t.ProblemID, &t.ProblemPID, &t.ProblemTitle, &t.CreatedAt)
+		&t.ProblemID, &t.ProblemPID, &t.ProblemTitle, &visible, &t.ProblemOwnerID, &t.CreatedAt)
+	t.ProblemVisible = visible != 0
 	return t, notFound(err)
 }
 

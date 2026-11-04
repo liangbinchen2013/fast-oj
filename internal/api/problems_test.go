@@ -182,6 +182,14 @@ func TestHiddenProblemVisibility(t *testing.T) {
 	if code, body := h.htmlGet("/problems/H1", h.adminToken()); code != http.StatusOK || !strings.Contains(body, "未公开") {
 		t.Fatalf("hidden detail = %d", code)
 	}
+	// 隐藏题的样例也是题目存在性的把手：未登录不能通过用例 URL 探出来，维护者仍能取。
+	h.uploadCases("H1")
+	if code, _ := h.get("/problems/H1/cases/sample1/in", ""); code != http.StatusNotFound {
+		t.Fatalf("anon hidden sample = %d, want 404", code)
+	}
+	if code, body := h.get("/problems/H1/cases/sample1/in", h.adminToken()); code != http.StatusOK || body != "1 2\n" {
+		t.Fatalf("admin hidden sample = %d %q", code, body)
+	}
 }
 
 func TestCaseUploadAndAccess(t *testing.T) {
