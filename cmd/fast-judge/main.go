@@ -58,7 +58,12 @@ func jailIdentity(drop *judge.DropTo, userNS bool) (uint32, uint32) {
 const nobody = 65534
 
 // setupSandbox 定下沙盒配置，并当场真建一次牢房。-sandbox=on 而建不起来就直接不启动：
-// 明确拒绝比悄悄少一层防护好；auto 则带着"未隔离"这句话继续干活。
+// 明确拒绝比悄悄少一层防护好。
+//
+// auto 的"开不了就继续"只适用于 Windows 这种根本没有对应内核机制的平台（run 里会先把
+// mode 改成 off），以及 root 判机这种还能靠 -run-as 兜住身份的情况。Linux 非 root 判机
+// 开不了 user namespace 牢房时，提交会和判机同 uid、同宿主文件系统；继续判就是把判机
+// 令牌、数据库和别人的源码直接交给选手，所以这里必须拒绝启动。
 func setupSandbox(dir string, mode jail.Mode, drop *judge.DropTo) (string, error) {
 	userNS := os.Getuid() != 0
 	uid, gid := jailIdentity(drop, userNS)
@@ -72,10 +77,30 @@ func setupSandbox(dir string, mode jail.Mode, drop *judge.DropTo) (string, error
 	}
 	judge.SetSandbox(self, mode, userNS, uid, gid)
 	note, err := judge.ProbeSandbox(dir)
-	if err != nil && mode == jail.On {
-		return "", fmt.Errorf("-sandbox=on 但牢房建不起来：%w", err)
+	if err != nil {
+		if mode == jail.On {
+			return "", fmt.Errorf("-sandbox=on 但牢房建不起来：%w", err)
+		}
+		if refusal := unsandboxedStartupRefusal(mode, runtime.GOOS, os.Getuid(), err); refusal != nil {
+			return "", refusal
+		}
 	}
 	return note, nil
+}
+
+// unsandboxedStartupRefusal 决定 auto 自检失败时要不要拒绝启动。
+//
+// 只拦 Linux 非 root：这是唯一"牢房没了、提交却仍以判机身份跑"的组合。root 判机若也
+// 开不了牢房，Runtime 的 Configure 会在没有 -run-as 时逐条拒绝（见 runner_other.go），
+// 有 -run-as 时至少跨 uid；非 root 没有这层兜底，只能在启动时停住。
+func unsandboxedStartupRefusal(mode jail.Mode, goos string, uid int, probeErr error) error {
+	if probeErr == nil || mode != jail.Auto || goos != "linux" || uid == 0 {
+		return nil
+	}
+	return fmt.Errorf("非 root 判机的 user namespace 牢房建不起来：%w。"+
+		"拒绝在没有隔离的状态下判题：提交会以判机自己的 uid 运行，能读判机令牌、数据库与别人的源码。"+
+		"请改用 root 或容器运行判机（root 判机建议同时配 -run-as uid:gid 作为第二身份）；"+
+		"如果确实要在无隔离状态下判题，必须显式加 -sandbox=off 并自行承担后果", probeErr)
 }
 
 func defaultName() string {
