@@ -93,3 +93,96 @@ func (h *harness) countBuckets(like string) int {
 	}
 	return n
 }
+
+// 站点设置里的那两个数字盖过启动参数：管理员调限速不该要重启服务。
+func TestSiteSubmitLimitOverridesStartupFlag(t *testing.T) {
+	h := newHarnessCfg(t, func(c *config.Config) { c.SubmitPerMinute = 200 })
+	student := h.signIn("stu2240")
+	h.readyProblem("P2240")
+
+	if code, out := h.postBearer("/admin/site", url.Values{
+		"title": {"我的 OJ"}, "submit_per_minute": {"2"},
+	}, h.adminToken()); code != http.StatusOK {
+		t.Fatalf("保存站点设置 = %d：\n%s", code, short(out))
+	}
+
+	for i := 0; i < 2; i++ {
+		if code, body := h.submitCode(student, "P2240", "cpp", "int main(){}"); code != http.StatusOK {
+			t.Fatalf("第 %d 次提交 = %d：\n%s", i+1, code, short(body))
+		}
+	}
+	code, body := h.submitCode(student, "P2240", "cpp", "int main(){}")
+	if code != http.StatusTooManyRequests {
+		t.Fatalf("启动参数那份是 200/分，站点设置里的 2 必须说话：%d\n%s", code, short(body))
+	}
+	if !strings.Contains(body, "一人每分钟最多 2 次") {
+		t.Errorf("被限住却没说是哪条闸门：%s", short(body))
+	}
+}
+
+// 全站那条闸挡的是"N 个账号一起刷"：一人一分钟的限制对这种情况没用。
+//
+// 被全站挡住的那一次不该记进这个人自己那一格——他没有真的提交，记上就是让他替
+// 站点的忙碌受罚，而且那一分钟他会越试越出不去。
+func TestSiteWideSubmitGateCoversEveryone(t *testing.T) {
+	h := newHarness(t)
+	first := h.signIn("stu2250")
+	second := h.signIn("stu2251")
+	h.readyProblem("P2250")
+
+	if code, out := h.postBearer("/admin/site", url.Values{
+		"title": {"我的 OJ"}, "site_submit_per_minute": {"2"},
+	}, h.adminToken()); code != http.StatusOK {
+		t.Fatalf("保存站点设置 = %d：\n%s", code, short(out))
+	}
+
+	if code, body := h.submitCode(first, "P2250", "cpp", "int main(){}"); code != http.StatusOK {
+		t.Fatalf("第一次提交 = %d：\n%s", code, short(body))
+	}
+	if code, body := h.submitCode(second, "P2250", "cpp", "int main(){}"); code != http.StatusOK {
+		t.Fatalf("第二次提交 = %d：\n%s", code, short(body))
+	}
+	code, body := h.submitCode(second, "P2250", "cpp", "int main(){}")
+	if code != http.StatusTooManyRequests {
+		t.Fatalf("第三份代码 = %d，要 429：\n%s", code, short(body))
+	}
+	if !strings.Contains(body, "全站一分钟最多收 2 次") {
+		t.Errorf("全站闸门没说清它挡的是什么：%s", short(body))
+	}
+
+	// 上限一调高，刚才被挡的那个人马上还能交：他没有被记进自己那一格。
+	if code, _ := h.postBearer("/admin/site", url.Values{
+		"title": {"我的 OJ"}, "site_submit_per_minute": {"6"},
+	}, h.adminToken()); code != http.StatusOK {
+		t.Fatalf("调高上限 = %d", code)
+	}
+	if code, body := h.submitCode(second, "P2250", "cpp", "int main(){}"); code != http.StatusOK {
+		t.Fatalf("调高后同一人再交 = %d：\n%s", code, short(body))
+	}
+}
+
+// 站点设置里填 0 就是"这一条我没设"：单用户那条回到启动参数，全站那条不限量。
+func TestSiteRateZeroFallsBack(t *testing.T) {
+	h := newHarnessCfg(t, func(c *config.Config) { c.SubmitPerMinute = 1 })
+	student := h.signIn("stu2260")
+	h.readyProblem("P2260")
+
+	if code, out := h.postBearer("/admin/site", url.Values{
+		"title": {"我的 OJ"}, "submit_per_minute": {"0"}, "site_submit_per_minute": {"0"},
+	}, h.adminToken()); code != http.StatusOK {
+		t.Fatalf("保存 = %d：\n%s", code, short(out))
+	}
+	for i := 0; i < 5; i++ {
+		code, body := h.submitCode(student, "P2260", "cpp", "int main(){}")
+		if i == 1 {
+			// 启动参数那份 1 次/分还在说话，站点里那个 0 不该把它顶掉。
+			if code != http.StatusTooManyRequests {
+				t.Fatalf("站点填 0 后启动参数那份仍该管：%d\n%s", code, short(body))
+			}
+			break
+		}
+		if code != http.StatusOK {
+			t.Fatalf("第 %d 次提交 = %d：\n%s", i+1, code, short(body))
+		}
+	}
+}

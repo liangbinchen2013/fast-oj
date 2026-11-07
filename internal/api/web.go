@@ -935,6 +935,51 @@ func (s *Server) contestForSubmission(r *http.Request, a actor, p store.Problem,
 	return claim, nil
 }
 
+// submitGates 是提交前的两道速率闸：先按人，再按全站。挡下来时返回给人看的那句话，
+// 放行则返回空串。
+//
+// 按人限而不是按 IP——一个机房 NAT 出一个 IP 是常态，按 IP 限会在开学第一节课把整班人
+// 挡在门外。全站那条挡的是另一件事：一人一分钟的限制拦不住 N 个账号一起刷，而队列等待
+// 是所有人共担的。上限都以站点设置里的数字优先，没填才回到启动参数（见 submitPerUser）。
+//
+// 两道都过了才记格子：被全站那条挡住的人并没有真的提交，把他记进自己那一格就是让他在
+// 替站点的忙碌受罚，而且那一分钟他会越试越出不去。
+func (s *Server) submitGates(r *http.Request, userID int64) (string, error) {
+	ctx := r.Context()
+	site := s.site(ctx)
+	limits := []struct {
+		key    string
+		max    int
+		refuse string
+	}{
+		{"submit:user:" + strconv.FormatInt(userID, 10), submitPerUser(site, s.cfg.SubmitPerMinute),
+			"提交太快了：一人每分钟最多 %d 次，等一分钟再试。判机是共享的，队列越长所有人的结果都越晚出来。"},
+		{"submit:site", site.SiteSubmitPerMinute,
+			"提交太快了：全站一分钟最多收 %d 次，这一分钟已经排满了。等一分钟再试——队列越长，所有人的结果都越晚出来。"},
+	}
+	for _, g := range limits {
+		if g.max <= 0 {
+			continue
+		}
+		allowed, err := s.db.RateAllowed(ctx, g.key, rateMinute, g.max)
+		if err != nil {
+			return "", err
+		}
+		if !allowed {
+			return fmt.Sprintf(g.refuse, g.max), nil
+		}
+	}
+	for _, g := range limits {
+		if g.max <= 0 {
+			continue
+		}
+		if _, err := s.db.RateHit(ctx, g.key, rateMinute); err != nil {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
 // handleSubmitForm is the browser side of submitting code: the same validation, then a
 // redirect to the result page instead of a body.
 func (s *Server) handleSubmitForm(w http.ResponseWriter, r *http.Request) {
@@ -948,23 +993,15 @@ func (s *Server) handleSubmitForm(w http.ResponseWriter, r *http.Request) {
 		s.errorPage(w, r, http.StatusRequestEntityTooLarge, "代码太长")
 		return
 	}
-	// 提交速率限制：判机是共享资源，队列深度就是所有人的等待时间。按人限而不是按 IP——
-	// 一个机房 NAT 出一个 IP 是常态，按 IP 限会在开学第一节课把整班人挡在门外。
-	if s.cfg.SubmitPerMinute > 0 {
-		key := "submit:user:" + strconv.FormatInt(a.User.ID, 10)
-		if allowed, err := s.db.RateAllowed(r.Context(), key, rateMinute, s.cfg.SubmitPerMinute); err != nil {
-			s.writeStoreError(w, r, err)
-			return
-		} else if !allowed {
-			s.errorPage(w, r, http.StatusTooManyRequests, fmt.Sprintf(
-				"提交太快了：一人每分钟最多 %d 次，等一分钟再试。"+
-					"判机是共享的，队列越长所有人的结果都越晚出来。", s.cfg.SubmitPerMinute))
-			return
-		}
-		if _, err := s.db.RateHit(r.Context(), key, rateMinute); err != nil {
-			s.writeStoreError(w, r, err)
-			return
-		}
+	// 提交速率限制：判机是共享资源，队列深度就是所有人的等待时间。
+	msg, gated := s.submitGates(r, a.User.ID)
+	if gated != nil {
+		s.writeStoreError(w, r, gated)
+		return
+	}
+	if msg != "" {
+		s.errorPage(w, r, http.StatusTooManyRequests, msg)
+		return
 	}
 	if err := r.ParseForm(); err != nil {
 		s.errorPage(w, r, http.StatusBadRequest, "表单解析失败: "+err.Error())

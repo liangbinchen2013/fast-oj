@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,39 @@ func (s *Server) site(ctx context.Context) store.SiteConfig {
 // flip in the browser.
 func (s *Server) registrationOpen(r *http.Request) bool {
 	return s.cfg.AllowRegister && s.site(r.Context()).AllowRegister
+}
+
+// submitPerUser 是"一个人一分钟能交几次"这一条的生效值：站点设置里填了就用它，填 0
+// 表示没设、回到启动参数 -submit-per-minute 那一份。管理员调这个不该要重启服务，而从没
+// 进过这一页的部署仍然拿自己启动时选的那个默认值。
+func submitPerUser(site store.SiteConfig, fromFlag int) int {
+	if site.SubmitPerMinute > 0 {
+		return site.SubmitPerMinute
+	}
+	return fromFlag
+}
+
+// maxRatePerMinute 是这两条闸门的天花板。填一百万次/一分钟不是"限制"而是没限制，却会把
+// login_attempts 那一格的计数一直往上堆，页面上写着"这一分钟已经用了 999999 次"——
+// 数字该有个能解释的上限。
+const maxRatePerMinute = 10000
+
+// rateField 读表单里一个"每分钟次数"：空框和 0 都是"这一条我没设"，负数、写坏的、超过
+// 上限的都退回表单重填。悄悄把看不懂的值存成 0 等于替管理员关掉一道闸门，那是这一页
+// 最不该犯的错。
+func rateField(r *http.Request, name, label string) (int, string) {
+	raw := strings.TrimSpace(r.FormValue(name))
+	if raw == "" {
+		return 0, ""
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, label + "要填 0.." + strconv.Itoa(maxRatePerMinute) + " 的整数，0 表示不设限制。"
+	}
+	if n > maxRatePerMinute {
+		return 0, label + "最多填 " + strconv.Itoa(maxRatePerMinute) + " 次/分钟：再高就和没设一样了。"
+	}
+	return n, ""
 }
 
 // featureClosed is the one answer every switched-off feature gives: the write stops
@@ -286,6 +320,19 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 	fail := func(msg string) {
 		s.renderSite(w, r, a, http.StatusBadRequest, in, rawLinks, msg, smtpTestInput{})
 	}
+	// 速率那两条是数字：空框与 0 是同一个意思（这一条没设）。填了"两三"这种看不懂的值
+	// 要退回表单让人重填，而不是悄悄按 0 存下去把闸门关掉——那正好是最危险的那种误操作。
+	rate, bad := rateField(r, "submit_per_minute", "一人每分钟提交次数")
+	if bad != "" {
+		fail(bad)
+		return
+	}
+	in.SubmitPerMinute = rate
+	if rate, bad = rateField(r, "site_submit_per_minute", "全站每分钟提交总量"); bad != "" {
+		fail(bad)
+		return
+	}
+	in.SiteSubmitPerMinute = rate
 	// Counted in runes because that is what the form's maxlength counts: 60 bytes
 	// would refuse a 20-character Chinese site name.
 	if tooLong(in.Tagline, 2000) || tooLong(in.Footer, 2000) || tooLong(in.APIHint, 2000) {
