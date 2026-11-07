@@ -130,12 +130,12 @@ func (s *Server) decodeBody(w http.ResponseWriter, r *http.Request, dst any) boo
 }
 
 func (s *Server) decodeBodyLimit(w http.ResponseWriter, r *http.Request, dst any, limit int64) bool {
-	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+	body, tooBig, err := readCapped(r.Body, limit)
 	if err != nil {
 		s.respondError(w, r, http.StatusBadRequest, "unreadable body")
 		return false
 	}
-	if int64(len(body)) > limit {
+	if tooBig {
 		s.respondError(w, r, http.StatusRequestEntityTooLarge,
 			fmt.Sprintf("body over %d bytes", limit))
 		return false
@@ -194,19 +194,20 @@ func (s *Server) collectCases(zipBody []byte) ([]casePair, error) {
 		if stem == "" || (ext != ".in" && ext != ".out" && ext != ".ans") {
 			continue
 		}
-		if f.UncompressedSize64 > uint64(s.cfg.MaxCase) {
+		// 单个测试点默认不限量：闸门只在设了数字时才存在（见 config 里 MaxCase 那段）。
+		if s.cfg.MaxCase > 0 && f.UncompressedSize64 > uint64(s.cfg.MaxCase) {
 			return nil, fmt.Errorf("case %s over %d bytes", base, s.cfg.MaxCase)
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return nil, err
 		}
-		body, err := io.ReadAll(io.LimitReader(rc, s.cfg.MaxCase+1))
+		body, tooBig, err := readCapped(rc, s.cfg.MaxCase)
 		rc.Close()
 		if err != nil {
 			return nil, err
 		}
-		if int64(len(body)) > s.cfg.MaxCase {
+		if tooBig {
 			return nil, fmt.Errorf("case %s over %d bytes", base, s.cfg.MaxCase)
 		}
 		pair := byName[stem]
@@ -330,6 +331,23 @@ func (s *Server) handleCaseUpload(w http.ResponseWriter, r *http.Request) {
 	s.casesDone(w, r, p, fmt.Sprintf("导入完成：新增 %d 条，覆盖 %d 条，共 %d 条", added, replaced, total))
 }
 
+// readCapped 按闸门读一份字节：limit<=0 表示这一条没设闸，读到底。
+//
+// 设了闸时多读一个字节再判断，是为了让"超了"和"正好等于上限"分得开；返回 tooBig 让
+// 调用方给 413，而不是把截断剩下的半包递下去——那会以 "not a zip archive" 失败，
+// 是把一个人的误操作说成另一个人的文件坏了。
+func readCapped(src io.Reader, limit int64) ([]byte, bool, error) {
+	if limit <= 0 {
+		body, err := io.ReadAll(src)
+		return body, false, err
+	}
+	body, err := io.ReadAll(io.LimitReader(src, limit+1))
+	if err != nil {
+		return body, false, err
+	}
+	return body, int64(len(body)) > limit, nil
+}
+
 // readUpload accepts a raw zip body, or a zip inside a multipart file part.
 func (s *Server) readUpload(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	defer r.Body.Close()
@@ -347,22 +365,21 @@ func (s *Server) readUpload(w http.ResponseWriter, r *http.Request) ([]byte, boo
 			return nil, false
 		}
 		defer file.Close()
-		body, err := io.ReadAll(io.LimitReader(file, s.cfg.MaxUpload+1))
-		if err != nil || int64(len(body)) > s.cfg.MaxUpload {
-			s.respondError(w, r, http.StatusRequestEntityTooLarge, "upload too large")
+		body, tooBig, err := readCapped(file, s.cfg.MaxUpload)
+		if err != nil || tooBig {
+			s.respondError(w, r, http.StatusRequestEntityTooLarge, s.uploadTooBigText())
 			return nil, false
 		}
 		return body, true
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, s.cfg.MaxUpload+1))
+	body, tooBig, err := readCapped(r.Body, s.cfg.MaxUpload)
 	if err != nil {
 		s.respondError(w, r, http.StatusBadRequest, "unreadable body")
 		return nil, false
 	}
-	if int64(len(body)) > s.cfg.MaxUpload {
-		s.respondError(w, r, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("upload over %d bytes", s.cfg.MaxUpload))
+	if tooBig {
+		s.respondError(w, r, http.StatusRequestEntityTooLarge, s.uploadTooBigText())
 		return nil, false
 	}
 	if len(body) == 0 {
@@ -370,6 +387,14 @@ func (s *Server) readUpload(w http.ResponseWriter, r *http.Request) ([]byte, boo
 		return nil, false
 	}
 	return body, true
+}
+
+// uploadTooBigText 是设了闸又超了时那一句；没设闸时这句用不上，但也不能编一个数字出来。
+func (s *Server) uploadTooBigText() string {
+	if s.cfg.MaxUpload <= 0 {
+		return "upload too large"
+	}
+	return fmt.Sprintf("upload over %d bytes", s.cfg.MaxUpload)
 }
 
 // handleCaseBody streams one case file. Sample data is public; judged data needs

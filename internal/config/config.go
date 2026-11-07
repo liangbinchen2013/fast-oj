@@ -16,8 +16,13 @@ type Config struct {
 	AdminToken string
 	JudgeToken string
 	MaxSource  int64
-	MaxUpload  int64
-	MaxCase    int64
+	// MaxUpload 与 MaxCase 都是**部署方选的闸门**，代码里不设默认天花板：0（默认）就是
+	// 不限量，出题人要存多大的测试点是他的事，站点不替他决定。填正数才设闸。
+	// 代价写清楚：整包 zip 与包内每一条正文现在都是一次性读进内存的，所以不限量意味着
+	// 一次导入按包的大小占内存，判机判这条时也按正文大小占内存（见 judge 里 tc.Input）。
+	// 谁要把这道闸门压回去，就填一个正数——它挡的从来不是"合法的大用例"，而是无界的上传。
+	MaxUpload int64
+	MaxCase   int64
 	BCryptCost int
 	Secure     bool
 	// AllowRegister gates self-service signup; M10 moves the switch into the
@@ -61,6 +66,20 @@ func envInt(key string, fallback int) int {
 	return n
 }
 
+// envInt64 是 envInt 那一条给字节数用的版本：闸门是 64 位的，把 5 GB 写进环境变量
+// 再被 32 位截成一个奇怪的数，比读不到还难查。
+func envInt64(key string, fallback int64) int64 {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	n, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
 func defaultDataDir() string {
 	wd, err := os.Getwd()
 	if err != nil {
@@ -82,12 +101,15 @@ func (c *Config) Validate() error {
 	if c.MaxSource <= 0 {
 		return fmt.Errorf("max source size must be positive")
 	}
-	if c.MaxUpload <= 0 || c.MaxCase <= 0 {
-		return fmt.Errorf("max upload and max case sizes must be positive")
+	if c.MaxUpload < 0 {
+		c.MaxUpload = 0
 	}
-	if c.MaxCase > c.MaxUpload {
-		return fmt.Errorf("max-case must not exceed max-upload")
+	if c.MaxCase < 0 {
+		c.MaxCase = 0
 	}
+	// 0 = 不限量（见结构体那段），所以这里不再有"必须为正"这一条；也不再有
+	// max-case ≤ max-upload：单条本来就不该比整包大，那个不等式只在两个都设了数字时
+	// 才是人能理解的话，而它挡住过"只想放宽单条"的部署方。
 	if c.BCryptCost < 10 || c.BCryptCost > 14 {
 		return fmt.Errorf("bcrypt cost must be 10..14")
 	}
@@ -122,8 +144,10 @@ func Load(args []string) (Config, error) {
 		"一次性运维令牌（留空则由服务端生成并打印一次；用一次即作废）")
 	fs.StringVar(&c.JudgeToken, "judge-token", os.Getenv("FASTOJ_JUDGE_TOKEN"), "token granting judge access")
 	fs.Int64Var(&c.MaxSource, "max-source", 256<<10, "maximum accepted source/json body bytes")
-	fs.Int64Var(&c.MaxUpload, "max-upload", 64<<20, "maximum case archive upload bytes")
-	fs.Int64Var(&c.MaxCase, "max-case", 16<<20, "maximum single case file bytes")
+	fs.Int64Var(&c.MaxUpload, "max-upload", envInt64("FASTOJ_MAX_UPLOAD", 0),
+		"用例包上传的字节上限（0=不限，默认不限；填正数才设闸）")
+	fs.Int64Var(&c.MaxCase, "max-case", envInt64("FASTOJ_MAX_CASE", 0),
+		"单个测试点正文的字节上限（0=不限，默认不限：存多大是出题人的事）")
 	fs.IntVar(&c.BCryptCost, "bcrypt-cost", 11, "password hash cost (10 is weak, 14 is slow on login)")
 	fs.BoolVar(&c.Secure, "secure-cookies", false, "mark session cookies Secure (enable when serving over TLS)")
 	noRegister := fs.Bool("no-register", false, "关闭自助注册")

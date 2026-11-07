@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liangbinchen2013/fast-oj/internal/config"
 	"github.com/liangbinchen2013/fast-oj/internal/store"
 )
 
@@ -512,5 +513,47 @@ func TestCasesBatchSplitIsAPreviewNotAnApply(t *testing.T) {
 	}
 	if total, _ := h.db.ProblemScoreTotal(ctx(), h.problem("P715").ID); total != 3 {
 		t.Errorf("apply=split saved to the database (total %d); it should only fill the form", total)
+	}
+}
+
+// 单个测试点的存储大小默认没有上限：-max-case=0 就是不限量，存多大是出题人的事。
+// 设成正数时闸门必须还在——它挡的从来不是合法的大用例，而是无界的上传。
+func TestCaseSizeCapIsOffByDefaultAndStillWorksWhenSet(t *testing.T) {
+	heavy := strings.Repeat("0\n", 600_000) // 1.2 MB 正文；压进 zip 只有几 KB
+	archive := zipOf(map[string]string{"1.in": heavy, "1.out": "ok\n"})
+
+	opened := newHarnessCfg(t, func(c *config.Config) { c.MaxCase = 0; c.MaxUpload = 0 })
+	setter := opened.caseProblem("capoff", "P712")
+	if code, body := opened.uploadZipAs(setter, "/problems/P712/cases/upload", archive); code != http.StatusOK {
+		t.Fatalf("闸门关掉时这条 1.2 MB 该收：%d\n%s", code, short(body))
+	}
+	if id := opened.caseID("P712", "1"); id == 0 {
+		t.Fatal("用例没落库")
+	}
+
+	kept := newHarnessCfg(t, func(c *config.Config) { c.MaxCase = 1 << 20; c.MaxUpload = 0 })
+	keeper := kept.caseProblem("capon", "P713")
+	code, body := kept.uploadZipAs(keeper, "/problems/P713/cases/upload", archive)
+	if !strings.Contains(body, "over 1048576 bytes") {
+		t.Fatalf("设了 1 MB 的单条闸门，1.2 MB 却照样收下了：%d\n%s", code, short(body))
+	}
+	if _, err := kept.db.GetTestcase(ctx(), kept.problem("P713").ID, "1"); err == nil {
+		t.Error("被闸门挡住的那条还是落库了")
+	}
+}
+
+// 整包闸门关掉时，请求体不能被"闸门 + 内存预算"那 4 MB 悄悄卡住：那是把不限量
+// 说成 4 MB，比原来 64 MB 还小。
+func TestUploadWithoutCapAcceptsALargeArchive(t *testing.T) {
+	h := newHarnessCfg(t, func(c *config.Config) { c.MaxCase = 0; c.MaxUpload = 0 })
+	setter := h.caseProblem("bigupload", "P714")
+	// 约 9 MB 的压缩前内容，且不可压缩（伪随机字节），zip 本身就有几 MB。
+	body := make([]byte, 4<<20)
+	for i := range body {
+		body[i] = byte(i*131 + i/7)
+	}
+	archive := zipOf(map[string]string{"1.in": string(body), "1.out": "ok\n"})
+	if code, page := h.uploadZipAs(setter, "/problems/P714/cases/upload", archive); code != http.StatusOK {
+		t.Fatalf("不限量时这份 %d KB 的包该收下：%d\n%s", len(archive)/1024, code, short(page))
 	}
 }

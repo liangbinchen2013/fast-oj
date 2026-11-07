@@ -211,8 +211,12 @@ func (s *Server) guardCSRF(next http.Handler) http.Handler {
 		case isMultipart(r):
 			// Go 1.25 起 ParseForm 与 FormValue 都不再看 multipart 请求体，隐藏字段里的
 			// csrf 于是永远读不到，网页上传用例包一律 403「表单已过期」。这一路只能自己解。
-			// 顺手给整个请求体封顶：不封的话匿名请求也能拿超大文件去堆磁盘上的临时文件。
-			r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxUpload+multipartMemory)
+			// 设了闸（-max-upload 为正）才给整个请求体封顶：不封的话匿名请求也能拿超大
+			// 文件去堆磁盘上的临时文件；而闸门关掉时不能拿"闸门 + 内存预算"当上限，
+			// 那会把不限量悄悄变成 4 MB。
+			if s.cfg.MaxUpload > 0 {
+				r.Body = http.MaxBytesReader(w, r.Body, s.cfg.MaxUpload+multipartMemory)
+			}
 			if err := r.ParseMultipartForm(multipartMemory); err != nil {
 				var over *http.MaxBytesError
 				if errors.As(err, &over) {
