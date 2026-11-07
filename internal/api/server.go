@@ -44,6 +44,8 @@ type Server struct {
 	hits    hitCounters
 	bans    banCache
 	traffic trafficTable
+	// disk 缓存整棵数据目录的统计：数一遍是磁盘上的活，状态页不该每次都付这笔钱。
+	disk diskCache
 	// muPublic guards the two IP-gate stamps: publicSeen throttles the once-a-minute
 	// write that keeps the page unlocked across a restart, publicOn caches the lookup
 	// so a loopback-only deployment does not query the database on every render.

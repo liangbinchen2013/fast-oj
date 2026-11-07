@@ -139,6 +139,10 @@ func formatBytes(n int64, err error) string {
 		return "缺文件"
 	}
 	switch {
+	// GB 那一档是给磁盘那几行用的：一个 20 GB 的数据目录写成 "20480.00 MB" 就得让人
+	// 心算一次除法，而这一页的存在理由正是"一眼看出该清哪一块"。
+	case n >= 1<<30:
+		return strconv.FormatFloat(float64(n)/(1<<30), 'f', 2, 64) + " GB"
 	case n >= 1<<20:
 		return strconv.FormatFloat(float64(n)/(1<<20), 'f', 2, 64) + " MB"
 	case n >= 1024:
