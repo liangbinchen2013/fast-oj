@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/liangbinchen2013/fast-oj/internal/config"
+	"github.com/liangbinchen2013/fast-oj/internal/protocol"
 	"github.com/liangbinchen2013/fast-oj/internal/store"
 )
 
@@ -401,5 +403,97 @@ func TestProfileShowsBioAndPosts(t *testing.T) {
 	}
 	if code, body := h.htmlGet("/u/bioed", ""); code != http.StatusOK || !strings.Contains(body, "bioed") {
 		t.Fatalf("json profile = %d %s", code, body)
+	}
+}
+
+// 站点这一页现在两件事一起答："现在怎么样"（磁盘、队列、判机）和"我该怎么调"（速率）。
+// 数字要真的来自库里的那一刻，而不是模板里写死的一句安慰话。
+func TestSitePageShowsStatusAndRateFields(t *testing.T) {
+	h := newHarnessCfg(t, func(c *config.Config) { c.SubmitPerMinute = 7 })
+	student := h.signIn("stu2300")
+	h.readyProblem("P2300")
+	if code, body := h.submitCode(student, "P2300", "cpp", "int main(){}"); code != http.StatusOK {
+		t.Fatalf("提交 = %d：\n%s", code, short(body))
+	}
+	yes := true
+	if _, err := h.db.UpsertJudge(ctx(), "box-2300", []string{"cpp"}, protocol.Capabilities, "判机一号", &yes); err != nil {
+		t.Fatal(err)
+	}
+
+	code, page := h.htmlGet("/admin/site", h.adminToken())
+	if code != http.StatusOK {
+		t.Fatalf("站点页 = %d：\n%s", code, short(page))
+	}
+	for _, want := range []string{
+		"运行状态", "各部分占用", "数据库 fast-oj.db", "用例正文", "所在盘剩余",
+		"评测队列", "排队待判", "正在编译", "被判机领走却没交回",
+		"评测机（1/1 在线", "box-2300", "有牢房",
+		"一人每分钟最多提交几次", "全站每分钟一共收几次", `name="site_submit_per_minute"`,
+		"现在是 <b>7</b> 次/分",
+	} {
+		if !strings.Contains(page, want) {
+			t.Errorf("状态页少了这一句：%q\n%s", want, short(page))
+		}
+	}
+	// 队列那个 1 是真的从库里读出来的，不是"暂无"。
+	if !strings.Contains(page, `<td class="num">1</td>`) {
+		t.Errorf("待判数字没落到表里：\n%s", short(page))
+	}
+}
+
+// 存过的速率数字要回到框里：这一页同时是设置页，重开时看到 0/空框就等于让人以为没存上。
+func TestSiteRateFieldsComeBackAfterSave(t *testing.T) {
+	h := newHarness(t)
+	if code, out := h.postBearer("/admin/site", url.Values{
+		"title": {"我的 OJ"}, "submit_per_minute": {"4"}, "site_submit_per_minute": {"60"},
+	}, h.adminToken()); code != http.StatusOK {
+		t.Fatalf("保存 = %d：\n%s", code, short(out))
+	}
+	_, page := h.htmlGet("/admin/site", h.adminToken())
+	for _, want := range []string{`name="submit_per_minute"`, `value="4"`, `value="60"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("保存后页面上没有 %q：\n%s", want, short(page))
+		}
+	}
+	// 审计摘要要留下这两条数字：出争议时"那段时间限的是几次"就是决定谁被挡住的那个事实。
+	rows := h.auditRows("site.save")
+	if len(rows) == 0 {
+		t.Fatal("没留下 site.save 的审计行")
+	}
+	for _, want := range []string{"一人每分钟提交 4 次", "全站每分钟提交 60 次"} {
+		if !strings.Contains(rows[0].Detail, want) {
+			t.Errorf("审计摘要少了 %q：%q", want, rows[0].Detail)
+		}
+	}
+}
+
+// 填看不懂的值要退回表单重填，而不是按 0 存下去——悄悄关掉一道闸门是这一页最不该犯的错。
+func TestSiteRateRejectsGarbage(t *testing.T) {
+	h := newHarness(t)
+	code, page := h.postBearer("/admin/site", url.Values{
+		"title": {"我的 OJ"}, "submit_per_minute": {"两三"},
+	}, h.adminToken())
+	if code != http.StatusBadRequest {
+		t.Fatalf("乱填的速率 = %d，要 400：\n%s", code, short(page))
+	}
+	if !strings.Contains(page, "一人每分钟提交次数要填 0..10000 的整数") {
+		t.Errorf("没说是哪一条填坏了：\n%s", short(page))
+	}
+	site, err := h.db.Site(ctx())
+	if err != nil || site.SubmitPerMinute != 0 {
+		t.Fatalf("被拒的那次不该写进库：%+v %v", site, err)
+	}
+}
+
+func TestWaitTextReadsLikeChinese(t *testing.T) {
+	for _, one := range []struct {
+		ms   int64
+		want string
+	}{
+		{0, "—"}, {45_000, "45 秒"}, {192_000, "3 分 12 秒"}, {3_720_000, "1 小时 2 分"},
+	} {
+		if got := waitText(one.ms); got != one.want {
+			t.Errorf("waitText(%d) = %q, want %q", one.ms, got, one.want)
+		}
 	}
 }

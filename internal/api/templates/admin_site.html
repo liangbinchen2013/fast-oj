@@ -2,6 +2,50 @@
 <h1>站点设置</h1>
 <p class="meta">改完立即生效（缓存 2 秒）。首页语、页脚与 API 提示支持 Markdown 和 $KaTeX$ 公式。</p>
 
+<h2>运行状态</h2>
+<p class="meta">磁盘这组数字半小时才重数一次（整棵用例目录要真的去走一遍），刚删完题刷新一下未必会变。</p>
+
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
+<table>
+  <tr><th>各部分占用</th><th class="num">大小</th><th class="num">占比</th></tr>
+  {{range .Data.Status.Disk.Rows}}
+  <tr><td>{{.Name}}</td><td class="num">{{.Size}}</td><td class="num">{{.Pct}}%</td></tr>
+  {{end}}
+  <tr><td>所在盘剩余 / 总量<span class="meta">（{{.Data.Status.Dir}}）</span></td>
+      <td class="num">{{.Data.Status.Disk.FreeText}}</td><td class="num">{{.Data.Status.Disk.TotalText}}</td></tr>
+</table>
+</div>
+{{if .Data.Status.DiskNote}}<p class="flash bad">{{.Data.Status.DiskNote}}</p>{{end}}
+{{if .Data.Status.Disk.Partial}}<p class="meta">用例文件太多，这一趟只数到前 20 万项：上面写的是<b>至少</b>这么多。</p>{{end}}
+<p class="meta">{{.Data.Status.JudgeDirNote}}</p>
+
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
+<table>
+  <tr><th>评测队列</th><th class="num">条数</th><th class="num">最久等待</th></tr>
+  <tr><td>排队待判</td><td class="num">{{.Data.Status.Queue.Queued}}</td><td class="num">{{.Data.Status.Wait}}</td></tr>
+  <tr><td>正在编译 / 正在判</td><td class="num">{{.Data.Status.Queue.Running}}</td><td class="num">—</td></tr>
+  <tr><td>被判机领走却没交回（孤儿）</td><td class="num">{{.Data.Status.Queue.Abandoned}}</td><td class="num">—</td></tr>
+</table>
+</div>
+{{if .Data.Status.QueueNote}}<p class="flash bad">{{.Data.Status.QueueNote}}</p>{{end}}
+<p class="meta">「孤儿」是判机领了工单以后中途死掉留下的那几条：它们不会再自己变好，
+  判机下次心跳时会把它们退回队列。数字一直不为零，就该去看那台判机的日志。</p>
+
+<h3>评测机（{{.Data.Status.OnlineText}}，90 秒内报过平安就算在线）</h3>
+{{if .Data.Status.Warning}}<p class="flash bad">{{.Data.Status.Warning}}</p>{{end}}
+{{if .Data.Status.JudgeNote}}<p class="flash bad">{{.Data.Status.JudgeNote}}</p>{{end}}
+<div class="table-scroll" role="region" aria-label="数据表格" tabindex="0">
+<table>
+  <tr><th>名称</th><th>能判的语言</th><th>隔离</th><th>最近心跳</th></tr>
+  {{range .Data.Status.Judges}}
+  <tr><td>{{.Name}}</td><td>{{.Languages}}</td><td>{{.Jail}}</td><td>{{.Seen}}</td></tr>
+  {{else}}
+  <tr><td colspan="4">还没有判机连上来，提交会一直排队。</td></tr>
+  {{end}}
+</table>
+</div>
+<p class="meta">能力、备注这些看完整的一张表在 <a href="/judges">判机</a> 那一页。</p>
+
 <form method="post" action="/admin/site">
   <input type="hidden" name="csrf" value="{{.Me.CSRF}}">
 
@@ -52,6 +96,28 @@
       注册需要验证邮箱（要先把下面的发信配置填好）
     </label>
   </div>
+
+  <h2>提交速率限制</h2>
+  <p class="meta">两道闸都是按"一分钟"这个窗口算的，判机是共享资源：队列越长，所有人的结果都越晚出来。
+    填 <b>0</b> 或留空的意思是"这一条我没设"——按人那条会回到启动参数
+    <code>-submit-per-minute</code>（这台服务器现在是 <b>{{.Data.Status.StartupSubmit}}</b> 次/分），
+    按站那条就是不限量。计数按账号而不是按 IP：一个机房 NAT 出一个地址是常态。</p>
+  <div class="row">
+    <div>
+      <label>一人每分钟最多提交几次（0 = 按启动参数）</label>
+      <input type="number" name="submit_per_minute" min="0" max="10000"
+        value="{{if .Data.Site.SubmitPerMinute}}{{.Data.Site.SubmitPerMinute}}{{end}}"
+        placeholder="{{.Data.Status.StartupSubmit}}">
+    </div>
+    <div>
+      <label>全站每分钟一共收几次（0 = 不限）</label>
+      <input type="number" name="site_submit_per_minute" min="0" max="10000"
+        value="{{if .Data.Site.SiteSubmitPerMinute}}{{.Data.Site.SiteSubmitPerMinute}}{{end}}"
+        placeholder="不限">
+    </div>
+  </div>
+  <p class="meta">按全站那条挡人时，被挡住的那个人<b>不会</b>被记进他自己那一格——他没有真的提交，
+    记上就是让他在替站点的忙碌受罚。建题的速率（<code>-problem-per-minute</code>）仍然只在启动参数里。</p>
 
   <h2>发信配置（SMTP）</h2>
   <p class="meta">验证邮件和下面那封测试邮件都从这里发。<b>密码不会显示在页面上</b>：

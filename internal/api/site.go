@@ -203,12 +203,96 @@ type sitePageData struct {
 	// come back so a failure does not make them re-enter the address.
 	TestTo   string
 	TestBody string
+	// Status 是这一页上半部分那几块数字。设置与状态放同一页是因为它们回答的是同一个问题：
+	// "现在这台站点怎么样、我该怎么调"。
+	Status siteStatus
+}
+
+// siteStatus 是站点状态那三块：磁盘、评测队列、评测机。
+//
+// 每一块都带一句"这块没数出来"的话而不是让整个页面失败：拿不到磁盘不该让管理员
+// 连队列都看不见。
+type siteStatus struct {
+	Disk     DiskUsage
+	DiskNote string
+	Queue    store.QueueStatus
+	// Wait 是最久等待那一个数字的人话写法（3 分 12 秒），空队列时是"—"。
+	Wait       string
+	QueueNote  string
+	Judges     []judgeRow
+	JudgeNote  string
+	OnlineText string
+	Warning    string
+	// Dir 是数据目录的绝对路径：数出来的那几个数字要能对上一个具体位置，否则"这个 12 GB
+	// 到底是哪块盘"还得人去猜。这一页只有拿着 site.settings 的人看得到。
+	Dir string
+	// StartupSubmit 是启动参数 -submit-per-minute 那一份，页面上要写出来：站点里那个框
+	// 留空时真正生效的是它，看不到它就没法知道自己留空会得到什么。
+	StartupSubmit int
+	// JudgeDirNote 说清一件容易被误会的事：判机的工作目录在判机那台机器上，这里数的是
+	// 服务器这块盘。
+	JudgeDirNote string
+}
+
+// onlineWindowMS 是"这台判机还算在线"的那段时间，与统计页那条同一个数：判机每次心跳
+// 都会刷新它，两个页面给出两个不同的判据就没有意义了。
+const onlineWindow = 90 * time.Second
+
+func (s *Server) siteStatusOf(r *http.Request) siteStatus {
+	ctx := r.Context()
+	st := siteStatus{
+		Dir: s.cfg.DataDir, StartupSubmit: s.cfg.SubmitPerMinute,
+		JudgeDirNote: "判机的工作目录（编译与运行那份临时文件）在判机自己的机器上，这里数的是服务器这块盘。",
+	}
+	if usage, err := s.diskUsage(ctx); err != nil {
+		st.DiskNote = "磁盘没数出来：" + err.Error()
+	} else {
+		st.Disk = usage
+	}
+	if q, err := s.db.QueueStatus(ctx); err != nil {
+		st.QueueNote = "队列没读出来：" + err.Error()
+	} else {
+		st.Queue = q
+		st.Wait = waitText(q.WaitMS)
+	}
+	judges, err := s.db.ListJudges(ctx)
+	if err != nil {
+		st.JudgeNote = "判机名单没读出来：" + err.Error()
+	} else {
+		st.Judges = judgeRowsOf(judges)
+		st.Warning = noJailWarning(judges)
+		online := 0
+		for _, j := range judges {
+			if time.Since(time.UnixMilli(j.LastSeenAt)) <= onlineWindow {
+				online++
+			}
+		}
+		st.OnlineText = strconv.Itoa(online) + "/" + strconv.Itoa(len(judges)) + " 在线"
+	}
+	return st
+}
+
+// waitText 把"最久等了多久"写成 3 分 12 秒。裸毫秒在页面上没人会读，而超过一小时还
+// 排着就说明队列真堵住了——那时候要看的正是这种长度。
+func waitText(ms int64) string {
+	if ms <= 0 {
+		return "—"
+	}
+	d := time.Duration(ms) * time.Millisecond
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(d.Seconds())) + " 秒"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + " 分 " + strconv.Itoa(int(d.Seconds())%60) + " 秒"
+	}
+	return strconv.Itoa(int(d.Hours())) + " 小时 " + strconv.Itoa(int(d.Minutes())%60) + " 分"
 }
 
 func (s *Server) renderSite(w http.ResponseWriter, r *http.Request, a actor, status int, site store.SiteConfig, rawLinks, msg string, test smtpTestInput) {
 	s.page(w, r, status, "站点设置", "admin_site", a.viewer(), msg, sitePageData{
 		Site: site, Links: rawLinks, TLSModes: tlsModeList(),
 		TestTo: test.To, TestBody: test.Body,
+		Status: s.siteStatusOf(r),
 	})
 }
 

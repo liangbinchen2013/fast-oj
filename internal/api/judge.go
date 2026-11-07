@@ -515,12 +515,16 @@ func (s *Server) handleJudgeList(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, r, err)
 		return
 	}
+	rows := judgeRowsOf(judges)
+	s.page(w, r, http.StatusOK, "判机", "judges", s.viewerOf(r), msgOf(r),
+		map[string]any{"Rows": rows, "Warning": noJailWarning(judges)})
+}
+
+// judgeRowsOf 把注册表里的判机排成给人看的那几行。/judges 与站点状态页共用它，
+// 因为两页该说同一句话——同一份事实写两处，迟早会有一处先撒谎。
+func judgeRowsOf(judges []store.Judge) []judgeRow {
 	rows := make([]judgeRow, 0, len(judges))
-	jailed := 0
 	for _, j := range judges {
-		if j.Jailed {
-			jailed++
-		}
 		rows = append(rows, judgeRow{
 			ID: j.ID, Name: j.Name, Languages: joinOr(j.Languages, "不限"),
 			Jail: jailCell(j),
@@ -530,18 +534,26 @@ func (s *Server) handleJudgeList(w http.ResponseWriter, r *http.Request) {
 			Seen: ago(j.LastSeenAt), Note: j.Note,
 		})
 	}
-	// 没有任何一台机器有牢房时当面警告：这时候提交是在判机的身份下、在宿主文件系统上跑的，
-	// 而这件事过去只写在启动日志的一行里。
-	warning := ""
-	if len(rows) > 0 && jailed == 0 {
-		warning = "现在在线的判机没有一台会把提交关进牢房：学生的代码是在判机自己的身份下、" +
-			"在宿主文件系统上跑的。要么把判机换成 root 起（牢房开得起，提交降到 nobody），" +
-			"要么给判机那台机器配好非特权 user namespace（Ubuntu 上就是 " +
-			"kernel.apparmor_restrict_unprivileged_userns 那一条），要么放进容器判。" +
-			"这不是判题失败：判定照常出，只是没有隔离。"
+	return rows
+}
+
+// noJailWarning 是没有任何一台机器有牢房时当面那句警告：这时候提交是在判机的身份下、
+// 在宿主文件系统上跑的，而这件事过去只写在启动日志的一行里。
+func noJailWarning(judges []store.Judge) string {
+	jailed := 0
+	for _, j := range judges {
+		if j.Jailed {
+			jailed++
+		}
 	}
-	s.page(w, r, http.StatusOK, "判机", "judges", s.viewerOf(r), msgOf(r),
-		map[string]any{"Rows": rows, "Warning": warning})
+	if len(judges) == 0 || jailed > 0 {
+		return ""
+	}
+	return "现在在线的判机没有一台会把提交关进牢房：学生的代码是在判机自己的身份下、" +
+		"在宿主文件系统上跑的。要么把判机换成 root 起（牢房开得起，提交降到 nobody），" +
+		"要么给判机那台机器配好非特权 user namespace（Ubuntu 上就是 " +
+		"kernel.apparmor_restrict_unprivileged_userns 那一条），要么放进容器判。" +
+		"这不是判题失败：判定照常出，只是没有隔离。"
 }
 
 // jailCell 是一行判机的隔离状态。三种说法必须分开：有牢房、报了开不起来、还没报过。

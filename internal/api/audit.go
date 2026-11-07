@@ -143,7 +143,19 @@ func siteSwitches(c store.SiteConfig) string {
 		state("注册", c.AllowRegister), state("动态", c.AllowFeed), state("帖子", c.AllowTopics),
 		state("比赛", c.AllowContests), state("私信", c.AllowDM),
 		fmt.Sprintf("友情链接 %d 条", len(c.Links)),
+		// 速率要留在摘要里：出争议时"那一段时间到底限了多少"是决定谁被挡住的那个事实，
+		// 而 0 有具体含义（按启动参数 / 不限），不能只留一个数字不解释。
+		fmt.Sprintf("一人每分钟提交 %s", rateText(c.SubmitPerMinute, "按启动参数")),
+		fmt.Sprintf("全站每分钟提交 %s", rateText(c.SiteSubmitPerMinute, "不限")),
 	}, " ")
+}
+
+// rateText 把一个"每分钟次数"写成人话：0 那一档单独说，因为它的意思不是"零次"。
+func rateText(n int, whenZero string) string {
+	if n <= 0 {
+		return whenZero
+	}
+	return strconv.Itoa(n) + " 次"
 }
 
 // --- the operator's page ---
