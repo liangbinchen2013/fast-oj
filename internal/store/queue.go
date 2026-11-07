@@ -234,3 +234,35 @@ func (db *DB) Rejudge(ctx context.Context, submissionID int64) (bool, error) {
 	}
 	return requeued, nil
 }
+
+// QueueStatus 是评测队列那一排给人看的数字：排队多少条、正在判多少条、有多少条被判机
+// 领走却没交回（abandoned——判机中途死掉就留在这里），以及排在最前面那条已经等了多久。
+type QueueStatus struct {
+	Queued    int
+	Running   int
+	Abandoned int
+	// WaitMS 是最老的待判提交从提交到现在过了多少毫秒；队列空时为 0。
+	WaitMS int64
+}
+
+func (db *DB) QueueStatus(ctx context.Context) (QueueStatus, error) {
+	var (
+		q      QueueStatus
+		oldest sql.NullInt64
+	)
+	// COALESCE 是必需的：一条都没在排队时 SUM() 给出 NULL，直接扫进 int 会整句失败。
+	err := db.SQL.QueryRowContext(ctx,
+		`SELECT COALESCE(SUM(status='queued'),0), COALESCE(SUM(status IN ('compiling','running')),0),
+		        COALESCE(SUM(status='abandoned'),0), MIN(CASE WHEN status='queued' THEN created_at END)
+		 FROM submissions WHERE status IN ('queued','compiling','running','abandoned')`).
+		Scan(&q.Queued, &q.Running, &q.Abandoned, &oldest)
+	if err != nil {
+		return q, fmt.Errorf("queue status: %w", err)
+	}
+	if oldest.Valid {
+		if q.WaitMS = nowMS() - oldest.Int64; q.WaitMS < 0 {
+			q.WaitMS = 0
+		}
+	}
+	return q, nil
+}

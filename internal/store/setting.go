@@ -61,6 +61,12 @@ type SiteConfig struct {
 	// that may not be configured yet.
 	RequireEmailVerify bool       `json:"require_email_verify"`
 	SMTP               SMTPConfig `json:"smtp"`
+	// 提交速率那两道闸门。SubmitPerMinute 是"一个人一分钟最多交几次"，0 表示这里没填、
+	// 按启动参数 -submit-per-minute 那一份走；SiteSubmitPerMinute 是"全站一分钟一共收
+	// 几次"，0 表示不限量。分开两条是因为它们挡的不是同一件事：按人是防一个人刷屏把队列
+	// 占满，按站是防整站被脚本刷爆（见 api 的 submitGates）。
+	SubmitPerMinute     int `json:"submit_per_minute"`
+	SiteSubmitPerMinute int `json:"site_submit_per_minute"`
 	// Points 是积分那一组可调参数（见 points.go）。放在这里而不是单独一个 getter：
 	// 它和站点名字一样存在 site_settings 里，同一次查询就能全读出来。
 	Points PointsConfig `json:"points"`
@@ -85,6 +91,10 @@ const (
 	setAllowDM       = "site.allow_dm"
 	// setRequireVerify is the 注册需要验证邮箱 switch (M25f).
 	setRequireVerify = "site.require_email_verification"
+	// 提交速率这两条闸门。它们是数字而不是开关，所以缺行读出来的 0 有具体含义：
+	// 单用户那条 0 = 回到启动参数，全站那条 0 = 不限量。
+	setSubmitPerMinute     = "site.submit_per_minute"
+	setSiteSubmitPerMinute = "site.site_submit_per_minute"
 	// The SMTP block. These are one group because a half-filled mailer is worse than
 	// an absent one: the test-mail button is what tells the operator which field is wrong.
 	setSMTPHost     = "smtp.host"
@@ -117,6 +127,17 @@ func boolSwitch(on bool) string {
 	return "0"
 }
 
+// countSetting 读一个"次数"设置：空、写坏、负数一律当 0（= 这一条没设）。理由和 SMTP
+// 端口那条一样——这个页面存在的意义就是让管理员把填错的东西改对，一行坏数字不该让
+// 整份设置读不出来。
+func countSetting(v string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 func (db *DB) Site(ctx context.Context) (SiteConfig, error) {
 	rows, err := db.SQL.QueryContext(ctx, `SELECT key, value FROM site_settings`)
 	if err != nil {
@@ -125,23 +146,25 @@ func (db *DB) Site(ctx context.Context) (SiteConfig, error) {
 	defer rows.Close()
 
 	values := map[string]string{
-		setTitle:         "fast oj",
-		setTagline:       "",
-		setFooter:        "",
-		setAPIHint:       DefaultAPIHint,
-		setLinks:         "[]",
-		setAllowRegister: "1",
-		setAllowFeed:     "1",
-		setAllowTopics:   "1",
-		setAllowContests: "1",
-		setAllowDM:       "1",
-		setRequireVerify: "0",
-		setSMTPHost:      "",
-		setSMTPPort:      "587",
-		setSMTPUsername:  "",
-		setSMTPPassword:  "",
-		setSMTPFrom:      "",
-		setSMTPTLS:       "starttls",
+		setTitle:               "fast oj",
+		setTagline:             "",
+		setFooter:              "",
+		setAPIHint:             DefaultAPIHint,
+		setLinks:               "[]",
+		setAllowRegister:       "1",
+		setAllowFeed:           "1",
+		setAllowTopics:         "1",
+		setAllowContests:       "1",
+		setAllowDM:             "1",
+		setRequireVerify:       "0",
+		setSMTPHost:            "",
+		setSMTPPort:            "587",
+		setSMTPUsername:        "",
+		setSMTPPassword:        "",
+		setSMTPFrom:            "",
+		setSMTPTLS:             "starttls",
+		setSubmitPerMinute:     "0",
+		setSiteSubmitPerMinute: "0",
 	}
 	for rows.Next() {
 		var k, v string
@@ -187,6 +210,8 @@ func (db *DB) Site(ctx context.Context) (SiteConfig, error) {
 			From:     values[setSMTPFrom],
 			TLSMode:  values[setSMTPTLS],
 		},
+		SubmitPerMinute:     countSetting(values[setSubmitPerMinute]),
+		SiteSubmitPerMinute: countSetting(values[setSiteSubmitPerMinute]),
 		// 积分参数缺行时全部落在默认值上（ParsePoints 逐行兜底），所以一个从没进过
 		// /admin/points 的站点也能直接按默认口径算分。
 		Points: ParsePoints(values),
@@ -253,6 +278,8 @@ func (db *DB) SetSiteAll(ctx context.Context, byUserID int64, in SiteConfig) err
 		{setSMTPPassword, in.SMTP.Password},
 		{setSMTPFrom, strings.TrimSpace(in.SMTP.From)},
 		{setSMTPTLS, in.SMTP.TLSMode},
+		{setSubmitPerMinute, strconv.Itoa(in.SubmitPerMinute)},
+		{setSiteSubmitPerMinute, strconv.Itoa(in.SiteSubmitPerMinute)},
 	}
 	return db.setMany(ctx, byUserID, writes)
 }

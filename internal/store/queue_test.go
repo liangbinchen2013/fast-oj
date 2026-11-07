@@ -438,3 +438,58 @@ func TestUpsertJudgeKeepsJailedUnknownApartFromNo(t *testing.T) {
 		}
 	}
 }
+
+func TestQueueStatusCountsAndWaits(t *testing.T) {
+	ctx := context.Background()
+	db, u, p, j := queueFixture(t)
+
+	submitSomething(t, db, u, p, "int main(){}")
+	second := submitSomething(t, db, u, p, "int main(){return 1;}")
+
+	q, err := db.QueueStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Queued != 2 || q.Running != 0 || q.Abandoned != 0 {
+		t.Fatalf("两条都在排队 = %+v", q)
+	}
+	if q.WaitMS < 0 {
+		t.Errorf("最久等待不该是负数：%+v", q)
+	}
+
+	if _, err := db.ClaimNext(ctx, j.ID, CapsAll); err != nil {
+		t.Fatal(err)
+	}
+	q, err = db.QueueStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Queued != 1 || q.Running != 1 {
+		t.Fatalf("领走一条后 = %+v", q)
+	}
+
+	// 剩下那条被判机领走后死掉，停在 abandoned：它既不是"还在排"也不是"正在判"，
+	// 但确实是堵住队列的一条，要单独数出来。
+	if _, err := db.SQL.ExecContext(ctx, `UPDATE submissions SET status='abandoned' WHERE id=?`, second.ID); err != nil {
+		t.Fatal(err)
+	}
+	q, err = db.QueueStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Queued != 0 || q.Running != 1 || q.Abandoned != 1 {
+		t.Fatalf("孤儿那条也要数进来：%+v", q)
+	}
+}
+
+func TestQueueStatusOnEmptyQueue(t *testing.T) {
+	ctx := context.Background()
+	db, _, _, _ := queueFixture(t)
+	q, err := db.QueueStatus(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q != (QueueStatus{}) {
+		t.Fatalf("空队列该全是 0，拿到 %+v", q)
+	}
+}

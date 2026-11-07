@@ -50,3 +50,48 @@ func TestSiteSettingsRoundTrip(t *testing.T) {
 		t.Errorf("api hint after clearing = %q, want empty", site.APIHint)
 	}
 }
+
+// 提交速率那两条数字是设置而不是开关：缺行读出来必须是"没设"（0），而"没设"在
+// 单用户那条上的含义是回到启动参数，在全站那条上是"不限量"。写坏的数字不能把整份
+// 设置读不出来——这一页存在的意义就是把填错的改对。
+func TestSiteRateSettingsRoundTrip(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	admin := mustUser(t, db, "admin11")
+
+	site, err := db.Site(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.SubmitPerMinute != 0 || site.SiteSubmitPerMinute != 0 {
+		t.Fatalf("defaults = %d/%d, want 0/0", site.SubmitPerMinute, site.SiteSubmitPerMinute)
+	}
+
+	if err := db.SetSiteAll(ctx, admin.ID, SiteConfig{
+		Title: "我的 OJ", SubmitPerMinute: 3, SiteSubmitPerMinute: 200,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	site, err = db.Site(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.SubmitPerMinute != 3 || site.SiteSubmitPerMinute != 200 {
+		t.Fatalf("after save = %d/%d", site.SubmitPerMinute, site.SiteSubmitPerMinute)
+	}
+
+	if _, err := db.SQL.ExecContext(ctx,
+		`UPDATE site_settings SET value='乱七八糟' WHERE key='site.submit_per_minute'`); err != nil {
+		t.Fatal(err)
+	}
+	site, err = db.Site(ctx)
+	if err != nil {
+		t.Fatalf("一行写坏的数字不该让整份设置读不出来：%v", err)
+	}
+	if site.SubmitPerMinute != 0 {
+		t.Errorf("坏值该落回 0，拿到 %d", site.SubmitPerMinute)
+	}
+	if site.SiteSubmitPerMinute != 200 {
+		t.Errorf("另一条不该被牵连，拿到 %d", site.SiteSubmitPerMinute)
+	}
+}
