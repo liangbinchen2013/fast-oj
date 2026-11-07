@@ -31,15 +31,17 @@ func TestDiskUsageSplitsDataDir(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 一个指向数据库的链接：跟着走会把它再数一遍，指向目录的链接则可能把这一趟带出
-	// 数据目录去。两种都不许发生。
+	// 数据目录去。两种都不许发生。Windows 上建符号链接要额外权限，拿不到就只少这一条
+	// 断言——上面那几个数字照样要数，别让整块磁盘统计在一个平台上悄悄没测过。
 	link := filepath.Join(dir, "cases", "12", "sneaky")
-	if err := os.Symlink(dbPath, link); err != nil {
-		t.Skipf("这台机器不允许建符号链接：%v", err)
-	}
+	symlinked := os.Symlink(dbPath, link) == nil
 
 	usage, err := scanDataDir(context.Background(), dir, dbPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !symlinked {
+		t.Log("这台机器不允许建符号链接：少了一条「链接不被跟随」的断言")
 	}
 	if usage.DBBytes != 5120 {
 		t.Errorf("数据库那格 = %d，要 4096+1024（链接不该被再数一遍）", usage.DBBytes)
@@ -56,7 +58,7 @@ func TestDiskUsageSplitsDataDir(t *testing.T) {
 	if usage.FreeBytes >= 0 {
 		t.Logf("所在盘剩余 %s（拿不到时写未知）", usage.FreeText())
 	}
-	if got := usage.Rows()[1].Size; got != "6.00 KB" {
+	if got := usage.Rows()[1].Size; got != "6.0 KB" {
 		t.Errorf("大小要写成人话，拿到 %q", got)
 	}
 }
