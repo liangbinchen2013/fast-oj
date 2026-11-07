@@ -205,6 +205,37 @@ func TestCaseEditorRefusesHugeFiles(t *testing.T) {
 	}
 }
 
+// 很多题包用 .ans 当答案文件；它应当和 .out 一样参与配对，且不影响样例识别。
+func TestCaseUploadAcceptsAnsAnswerFiles(t *testing.T) {
+	h := newHarness(t)
+	setter := h.caseProblem("anscase", "P720")
+	code, body := h.uploadZipAs(setter, "/problems/P720/cases/upload", zipOf(map[string]string{
+		"sample1.in": "1 2\n", "sample1.ans": "3\n",
+		"1.in": "4 5\n", "1.ans": "9\n",
+	}))
+	if code != http.StatusOK || !strings.Contains(body, "新增 2 条") {
+		t.Fatalf("ans import = %d %s", code, short(body))
+	}
+	if code, fetched := h.get("/problems/P720/cases/1/out", h.adminToken()); code != http.StatusOK || fetched != "9\n" {
+		t.Fatalf("ans answer = %d %q, want 9", code, fetched)
+	}
+}
+
+// 同一道用例同时出现 .out 与 .ans 时不能悄悄选一个：两份答案可能不同，必须让人改。
+func TestCaseUploadRefusesBothOutAndAns(t *testing.T) {
+	h := newHarness(t)
+	setter := h.caseProblem("ansconflict", "P721")
+	code, body := h.uploadZipAs(setter, "/problems/P721/cases/upload", zipOf(map[string]string{
+		"1.in": "1\n", "1.out": "1\n", "1.ans": "2\n",
+	}))
+	if code != http.StatusOK || !strings.Contains(body, "both .out and .ans") {
+		t.Fatalf("conflicting answer files = %d %s", code, short(body))
+	}
+	if n, _ := h.db.CountTestcases(ctx(), h.problem("P721").ID, false); n != 0 {
+		t.Fatalf("conflicting archive imported %d cases", n)
+	}
+}
+
 func TestCaseGroupsAreEditableFromTheWeb(t *testing.T) {
 	h := newHarness(t)
 	setter := h.caseProblem("grouper", "P703")

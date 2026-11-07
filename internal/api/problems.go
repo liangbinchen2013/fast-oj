@@ -175,14 +175,15 @@ type casePair struct {
 	Input, Output []byte
 }
 
-// collectCases pairs <stem>.in with <stem>.out inside a zip archive. Entries are
-// flattened to their base name, so a nested path cannot escape anywhere.
+// collectCases pairs <stem>.in with <stem>.out or <stem>.ans inside a zip archive.
+// Entries are flattened to their base name, so a nested path cannot escape anywhere.
 func (s *Server) collectCases(zipBody []byte) ([]casePair, error) {
 	zr, err := zip.NewReader(bytes.NewReader(zipBody), int64(len(zipBody)))
 	if err != nil {
 		return nil, fmt.Errorf("not a zip archive: %w", err)
 	}
 	byName := map[string]*casePair{}
+	answerExt := map[string]string{}
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -190,7 +191,7 @@ func (s *Server) collectCases(zipBody []byte) ([]casePair, error) {
 		base := path.Base(f.Name)
 		ext := strings.ToLower(path.Ext(base))
 		stem := strings.TrimSuffix(base, path.Ext(base))
-		if stem == "" || (ext != ".in" && ext != ".out") {
+		if stem == "" || (ext != ".in" && ext != ".out" && ext != ".ans") {
 			continue
 		}
 		if f.UncompressedSize64 > uint64(s.cfg.MaxCase) {
@@ -215,9 +216,13 @@ func (s *Server) collectCases(zipBody []byte) ([]casePair, error) {
 		}
 		if ext == ".in" {
 			pair.Input = body
-		} else {
-			pair.Output = body
+			continue
 		}
+		if prev := answerExt[stem]; prev != "" && prev != ext {
+			return nil, fmt.Errorf("case %s has both .out and .ans; keep only one answer file", stem)
+		}
+		answerExt[stem] = ext
+		pair.Output = body
 	}
 
 	var missing, out []casePair
@@ -234,7 +239,7 @@ func (s *Server) collectCases(zipBody []byte) ([]casePair, error) {
 			names[i] = m.Name
 		}
 		sort.Strings(names)
-		return nil, fmt.Errorf("incomplete pairs (need both .in and .out): %s", strings.Join(names, ", "))
+		return nil, fmt.Errorf("incomplete pairs (need both .in and .out/.ans): %s", strings.Join(names, ", "))
 	}
 	// Samples sort first so a sample-only re-run stays cheap.
 	sort.Slice(out, func(i, j int) bool {
@@ -245,7 +250,7 @@ func (s *Server) collectCases(zipBody []byte) ([]casePair, error) {
 		return out[i].Name < out[j].Name
 	})
 	if len(out) == 0 {
-		return nil, errors.New("no <name>.in / <name>.out pairs found")
+		return nil, errors.New("no <name>.in / <name>.out or .ans pairs found")
 	}
 	return out, nil
 }

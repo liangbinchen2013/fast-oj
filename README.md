@@ -108,7 +108,7 @@ curl -s localhost:8080/healthz          # ok
 | `POST` | `/problems/{key}/delete` | 该题 owner 或 `problem.edit.any` | 删题（连带用例文件） |
 | `GET` | `/problems/{key}/cases` | owner 或 `testcase.manage` | 用例管理页：列表、大小、加一条、zip 导入、清空 |
 | `POST` | `/problems/{key}/cases` | 同上 | 加一条用例（名称、分值、样例、输入、输出） |
-| `POST` | `/problems/{key}/cases/upload` | 同上 | 批量导入 zip（`名字.in` + `名字.out`，同名覆盖） |
+| `POST` | `/problems/{key}/cases/upload` | 同上 | 批量导入 zip（`名字.in` + `名字.out` 或 `名字.ans`，同名覆盖） |
 | `GET` `/POST` | `/problems/{key}/cases/{id}/edit` | 同上 | 改单条用例；超过 256KB 的文件只改元信息，内容走 zip |
 | `POST` | `/problems/{key}/cases/batch` | 同上 | 批量改分值与捆绑：一次保存整张表，一个事务 |
 | `POST` | `/problems/{key}/cases/{id}/delete` | 同上 | 删一条用例（连带它的文件） |
@@ -442,12 +442,12 @@ curl -s localhost:8080/healthz          # ok
 
 ## 用例包约定
 
-zip 里按 `<名字>.in` + `<名字>.out` 成对给出，目录层级会被压平（只取文件名）。
+zip 里按 `<名字>.in` + `<名字>.out`（或 `<名字>.ans`）成对给出，目录层级会被压平（只取文件名）。`.out` 与 `.ans` 是同一份答案的两个扩展名；同一条用例两个都出现时整包拒收，避免两份不同的答案被悄悄选中一份。
 
 - 名字以 `sample` 开头 → 判为**样例**，展示在题面上且不计分
 - 其余为**判题用例**，默认每条 1 分；分值与组名在用例页的「批量改分值与捆绑」表里一次改完整页
 - 重复上传按名字替换，**序号保持稳定**，判机顺序不会漂移
-- 只有 `.in` 没有 `.out` → 整个包拒收并列出缺哪些
+- 只有 `.in` 没有 `.out`/`.ans` → 整个包拒收并列出缺哪些
 - **组名（捆绑）**：同名即同组，组内任何一条没过（或判机没跑完这一组）整组 0 分；组的分值 = 组内各条之和。分数一律由服务器按逐条判定重算，判机谎报 AC 会被降级
 - **判题详情级别**（出题表单里选，只管别人看到的，源码与总分始终归提交者自己）：`none` 只给总判定与得分 → `case` 给逐条判定 → `diff` 再加实测/期望与失败用例（默认）→ `full` 再给判机编号；出题人与持 `submission.view.any` 的人始终看到全部
 - 单文件上限 `-max-case`（默认 16 MiB），整包上限 `-max-upload`（默认 64 MiB）
@@ -462,6 +462,8 @@ zip 只是批量入口：用例页「批量导入 zip」选一个包即可，同
 
 ```bash
 zip -j cases.zip 1.in 1.out sample1.in sample1.out
+# 也支持答案用 .ans 的题包
+zip -j cases.zip 2.in 2.ans sample2.in sample2.ans
 ```
 
 日常加一两条不用打包：用例页「加一条」里直接填输入输出。
