@@ -136,6 +136,13 @@ func TestHumanVerifyRegisterWaitsFromSecondAccount(t *testing.T) {
 	if strings.Contains(body, "还有 ") || strings.Contains(body, "约 1 秒") {
 		t.Errorf("验证窗把剩余秒数写在页面上：\n%s", short(body))
 	}
+	// 点击走 fetch：老浏览器没有 Sec-Fetch-*，服务端要看 Accept/Accept-Language/UA。
+	// fetch 默认 Accept 是 */*，模板必须显式补成浏览器形状，否则倒计时结束后一直 403。
+	for _, want := range []string{"'Accept': 'text/html'", "'Accept-Language':"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("verify fetch missing %s；真实老浏览器会被 looksLikeBrowser 拒掉", want)
+		}
+	}
 
 	values := url.Values{
 		"handle": {"bob"}, "email": {"bob@example.com"}, "password": {testPassword},

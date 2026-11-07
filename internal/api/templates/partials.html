@@ -107,14 +107,21 @@
       e.preventDefault();
       var body = new URLSearchParams(new FormData(box));
       body.set('js', '1');
+      // fetch 默认的 Accept 是 */*，而老浏览器（不带 Sec-Fetch-*）在服务端会退回看
+      // Accept / Accept-Language / UA 这三样；不显式带前两样，真人会在倒计时结束后
+      // 永远收到 403，页面还会误报“还没到时间”。这里把浏览器本来的形状补全。
       fetch('/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'text/html',
+          'Accept-Language': (navigator.language || 'zh-CN')
+        },
         body: body.toString(),
         credentials: 'same-origin'
       }).then(function (resp) {
         if (!resp.ok) {
-          text.textContent = '还没到时间，稍等一下再点。';
+          text.textContent = '验证没通过，请刷新页面再试一次。';
           return;
         }
         tick.classList.add('tick-on');
