@@ -67,7 +67,8 @@ func TestSolutionsAndColumns(t *testing.T) {
 	}
 	columnID := latestArticleID(t, h)
 	if code, body := h.getAs(other, "/columns"); code != http.StatusOK ||
-		!strings.Contains(body, "怎么读题") || strings.Contains(body, "草稿思路") {
+		!strings.Contains(body, "怎么读题") || strings.Contains(body, "草稿思路") ||
+		!strings.Contains(body, "写一篇专栏") || strings.Contains(body, "写一篇column") {
 		t.Fatalf("column list: %d %s", code, body)
 	}
 	if code, _ := h.getAs(other, "/solutions/"+itoa64(columnID)); code != http.StatusNotFound {

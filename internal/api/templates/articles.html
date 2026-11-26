@@ -1,7 +1,7 @@
 {{define "content"}}
 <h1>{{.Data.Title}}</h1>
 <p class="meta">
-  {{if .Data.SignedIn}}<a href="{{.Data.NewLink}}">写一篇{{.Data.Kind}}</a>{{else}}<a href="{{.Data.NewLink}}">登录后可以写{{.Data.Kind}}</a>{{end}}
+  {{if .Data.SignedIn}}<a href="{{.Data.NewLink}}">写一篇{{.Data.Title}}</a>{{else}}<a href="{{.Data.NewLink}}">登录后可以写{{.Data.Title}}</a>{{end}}
   {{if eq .Data.Kind "solution"}} · 题解按题目归档，从题目页进入{{end}}
 </p>
 
